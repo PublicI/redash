@@ -104,15 +104,15 @@
                       ng-click="executeQuery()">
                 <span class="zmdi zmdi-play"></span> Execute
               </button>
-              <query-formatter></query-formatter>
+              <query-formatter class="not-mobile"></query-formatter>
 
               <i class="fa fa-database"></i>
-              <span class="text-muted">Data Source</span>
+              <span class="text-muted not-mobile">Data Source</span>
               <select ng-disabled="!isQueryOwner" ng-model="query.data_source_id" ng-change="updateDataSource()"
                       ng-options="ds.id as ds.name for ds in dataSources"></select>
 
               <div class="pull-right">
-                <button class="btn btn-s btn-default" ng-click="duplicateQuery()" ng-disabled="query.id === undefined">
+                <button class="btn btn-s btn-default not-mobile" ng-click="duplicateQuery()" ng-disabled="query.id === undefined">
                   <span class="zmdi zmdi-arrow-split"></span> Fork
                 </button>
                 <button class="btn btn-default" ng-show="canEdit" ng-click="saveQuery()">

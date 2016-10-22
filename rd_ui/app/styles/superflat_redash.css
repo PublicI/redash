@@ -6846,6 +6846,14 @@ button.close {
     display: inline-block !important;
   }
 }
+@media screen and (max-width: 768px) {
+  .not-mobile {
+      display: none;
+  }
+  .navbar-ex1-collapse .form-group {
+    display: inline-block;
+  }
+}
 @media (min-width: 768px) and (max-width: 991px) {
   .visible-sm {
     display: block !important;
