@@ -679,3 +679,21 @@ div.table-name:hover {
     stroke-opacity: .2;
 }
 
+.navbar-left {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+.navbar-left .form-control {
+  height: 30px;
+  border-radius: 2px;
+}
+@media screen and (max-width: 768px) {
+  .navbar-left {
+    margin-top: 7.5px;
+    margin-bottom: 7.5px;
+  }
+  .navbar-left .form-control {
+    height: 35px;
+    border-radius: 2px;
+  }
+}
