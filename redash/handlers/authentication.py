@@ -10,6 +10,12 @@ from redash.authentication.account import validate_token, BadSignature, Signatur
 
 logger = logging.getLogger(__name__)
 
+def get_office365_auth_url(next_path):
+    if settings.MULTI_ORG:
+        office365_auth_url = url_for('office365_oauth.authorize_org', next=next_path, org_slug=current_org.slug)
+    else:
+        office365_auth_url = url_for('office365_oauth.authorize', next=next_path)
+    return office365_auth_url
 
 def get_google_auth_url(next_path):
     if settings.MULTI_ORG:
@@ -52,7 +58,11 @@ def render_token_login_page(template, org_slug, token):
         google_auth_url = get_google_auth_url(url_for('redash.index', org_slug=org_slug))
     else:
         google_auth_url = ''
-    return render_template(template, google_auth_url=google_auth_url, user=user), status_code
+    if settings.OFFICE365_OAUTH_ENABLED:
+        office365_auth_url = get_office365_auth_url(url_for('redash.index', org_slug=org_slug))
+    else:
+        office365_auth_url = ''
+    return render_template(template, office365_auth_url=office365_auth_url, google_auth_url=google_auth_url, user=user), status_code
 
 
 @routes.route(org_scoped_rule('/invite/<token>'), methods=['GET', 'POST'])
@@ -109,13 +119,16 @@ def login(org_slug=None):
             flash("Wrong email or password.")
 
     google_auth_url = get_google_auth_url(next_path)
+    office365_auth_url = get_office365_auth_url(next_path)
 
     return render_template("login.html",
                            org_slug=org_slug,
                            next=next_path,
                            username=request.form.get('username', ''),
                            show_google_openid=settings.GOOGLE_OAUTH_ENABLED,
+                           show_office365_oauth=settings.OFFICE365_OAUTH_ENABLED,
                            google_auth_url=google_auth_url,
+                           office365_auth_url=office365_auth_url,
                            show_saml_login=settings.SAML_LOGIN_ENABLED,
                            show_remote_user_login=settings.REMOTE_USER_LOGIN_ENABLED)
 

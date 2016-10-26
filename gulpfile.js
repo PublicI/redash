@@ -115,7 +115,7 @@ gulp.task('images', function () {
 });
 
 gulp.task('copy:extras', function () {
-  return gulp.src(applyAppPath(['/*/.*', '/google_login.png', '/favicon.ico', '/robots.txt']), { dot: true })
+  return gulp.src(applyAppPath(['/*/.*', '/office365_login.png', '/google_login.png', '/favicon.ico', '/robots.txt']), { dot: true })
     .pipe(gulp.dest(yeoman.dist));
 });
 

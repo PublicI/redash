@@ -8,6 +8,18 @@
   {% endfor %}
   {% endif %}
   {% endwith %}
+
+  {% if show_office365_oauth %}
+  <div class="row">
+    <a href="{{ office365_auth_url }}"><img src="/office365_login.png" class="login-button"/></a>
+  </div>
+
+  <div class="login-or">
+    <hr class="hr-or">
+    <span class="span-or">or</span>
+  </div>
+  {% endif %}
+
   {% if show_google_openid %}
   <div class="row">
     <a href="{{ google_auth_url }}"><img src="/google_login.png" class="login-button"/></a>

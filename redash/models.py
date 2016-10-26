@@ -170,6 +170,7 @@ class ApiUser(UserMixin, PermissionsCheckMixin):
 
 class Organization(ModelTimestampsMixin, BaseModel):
     SETTING_GOOGLE_APPS_DOMAINS = 'google_apps_domains'
+    SETTING_OFFICE365_DOMAINS = 'office365_domains'
     SETTING_IS_PUBLIC = "is_public"
 
     id = peewee.PrimaryKeyField()
@@ -199,6 +200,10 @@ class Organization(ModelTimestampsMixin, BaseModel):
     @property
     def google_apps_domains(self):
         return self.settings.get(self.SETTING_GOOGLE_APPS_DOMAINS, [])
+
+    @property
+    def office365_domains(self):
+        return self.settings.get(self.SETTING_OFFICE365_DOMAINS, [])
 
     @property
     def is_public(self):
