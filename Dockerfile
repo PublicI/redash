@@ -10,4 +10,6 @@ RUN npm install && npm run build && rm -rf node_modules
 RUN chown -R redash /app
 USER redash
 
-CMD ["/app/bin/docker-entrypoint/server"]
+EXPOSE 5000
+
+CMD ["exec","/usr/local/bin/gunicorn","-b","0.0.0.0:5000","--name","redash","-w4","redash.wsgi:app"]
