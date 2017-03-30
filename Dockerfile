@@ -12,4 +12,4 @@ USER redash
 
 EXPOSE 5000
 
-CMD ["exec","/usr/local/bin/gunicorn","-b","0.0.0.0:5000","--name","redash","-w4","redash.wsgi:app"]
+CMD ["/usr/local/bin/gunicorn","-b","0.0.0.0:5000","--name","redash","-w4","redash.wsgi:app"]
