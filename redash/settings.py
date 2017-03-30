@@ -1,6 +1,7 @@
 import json
 import os
 import urlparse
+
 from funcy import distinct, remove
 
 
@@ -63,8 +64,10 @@ STATSD_PORT = int(os.environ.get('REDASH_STATSD_PORT', "8125"))
 STATSD_PREFIX = os.environ.get('REDASH_STATSD_PREFIX', "redash")
 STATSD_USE_TAGS = parse_boolean(os.environ.get('REDASH_STATSD_USE_TAGS', "false"))
 
-# Connection settings for re:dash's own database (where we store the queries, results, etc)
-DATABASE_CONFIG = parse_db_url(os.environ.get("REDASH_DATABASE_URL", os.environ.get('DATABASE_URL', "postgresql://postgres")))
+# Connection settings for Redash's own database (where we store the queries, results, etc)
+SQLALCHEMY_DATABASE_URI = os.environ.get("REDASH_DATABASE_URL", os.environ.get('DATABASE_URL', "postgresql:///postgres"))
+SQLALCHEMY_TRACK_MODIFICATIONS = False
+SQLALCHEMY_ECHO = False
 
 # Celery related settings
 CELERY_BROKER = os.environ.get("REDASH_CELERY_BROKER", REDIS_URL)
@@ -127,7 +130,8 @@ REMOTE_USER_HEADER = os.environ.get("REDASH_REMOTE_USER_HEADER", "X-Forwarded-Re
 
 # Usually it will be a single path, but we allow to specify additional ones to override the default assets. Only the
 # last one will be used for Flask templates.
-STATIC_ASSETS_PATHS = [fix_assets_path(path) for path in os.environ.get("REDASH_STATIC_ASSETS_PATH", "../rd_ui/app/").split(',')]
+STATIC_ASSETS_PATHS = [fix_assets_path(path) for path in os.environ.get("REDASH_STATIC_ASSETS_PATH", "../client/dist/").split(',')]
+STATIC_ASSETS_PATHS.append(fix_assets_path('./static/'))
 
 JOB_EXPIRY_TIME = int(os.environ.get("REDASH_JOB_EXPIRY_TIME", 3600 * 6))
 COOKIE_SECRET = os.environ.get("REDASH_COOKIE_SECRET", "c292a0a3aa32397cdb050e233733900f")
@@ -149,6 +153,11 @@ MAIL_ASCII_ATTACHMENTS = parse_boolean(os.environ.get('REDASH_MAIL_ASCII_ATTACHM
 HOST = os.environ.get('REDASH_HOST', '')
 
 ALERTS_DEFAULT_MAIL_SUBJECT_TEMPLATE = os.environ.get('REDASH_ALERTS_DEFAULT_MAIL_SUBJECT_TEMPLATE', "({state}) {alert_name}")
+
+# How many requests are allowed per IP to the login page before
+# being throttled?
+# See https://flask-limiter.readthedocs.io/en/stable/#rate-limit-string-notation
+THROTTLE_LOGIN_PATTERN = os.environ.get('REDASH_THROTTLE_LOGIN_PATTERN', '50/hour')
 
 # CORS settings for the Query Result API (and possbily future external APIs).
 # In most cases all you need to do is set REDASH_CORS_ACCESS_CONTROL_ALLOW_ORIGIN
@@ -173,11 +182,16 @@ default_query_runners = [
     'redash.query_runner.hive_ds',
     'redash.query_runner.impala_ds',
     'redash.query_runner.vertica',
+    'redash.query_runner.clickhouse',
     'redash.query_runner.treasuredata',
     'redash.query_runner.sqlite',
     'redash.query_runner.dynamodb_sql',
     'redash.query_runner.mssql',
-    'redash.query_runner.jql'
+    'redash.query_runner.jql',
+    'redash.query_runner.google_analytics',
+    'redash.query_runner.snowflake',
+    'redash.query_runner.axibase_tsd',
+    'redash.query_runner.salesforce'
 ]
 
 enabled_query_runners = array_from_string(os.environ.get("REDASH_ENABLED_QUERY_RUNNERS", ",".join(default_query_runners)))
@@ -214,6 +228,8 @@ VERSION_CHECK = parse_boolean(os.environ.get("REDASH_VERSION_CHECK", "true"))
 FEATURE_DISABLE_REFRESH_QUERIES = parse_boolean(os.environ.get("REDASH_FEATURE_DISABLE_REFRESH_QUERIES", "false"))
 FEATURE_SHOW_QUERY_RESULTS_COUNT = parse_boolean(os.environ.get("REDASH_FEATURE_SHOW_QUERY_RESULTS_COUNT", "true"))
 FEATURE_SHOW_PERMISSIONS_CONTROL = parse_boolean(os.environ.get("REDASH_FEATURE_SHOW_PERMISSIONS_CONTROL", "false"))
+FEATURE_ALLOW_CUSTOM_JS_VISUALIZATIONS = parse_boolean(os.environ.get("REDASH_FEATURE_ALLOW_CUSTOM_JS_VISUALIZATIONS",
+                                                                     "false"))
 
 # BigQuery
 BIGQUERY_HTTP_TIMEOUT = int(os.environ.get("REDASH_BIGQUERY_HTTP_TIMEOUT", "600"))
@@ -225,10 +241,11 @@ SCHEMA_RUN_TABLE_SIZE_CALCULATIONS = parse_boolean(os.environ.get("REDASH_SCHEMA
 # WARNING: With this option enabled, Redash reads query parameters from the request URL (risk of SQL injection!)
 ALLOW_PARAMETERS_IN_EMBEDS = parse_boolean(os.environ.get("REDASH_ALLOW_PARAMETERS_IN_EMBEDS", "false"))
 
-### Common Client config
+# Common Client config
 COMMON_CLIENT_CONFIG = {
     'allowScriptsInUserInput': ALLOW_SCRIPTS_IN_USER_INPUT,
     'showPermissionsControl': FEATURE_SHOW_PERMISSIONS_CONTROL,
+    'allowCustomJSVisualizations': FEATURE_ALLOW_CUSTOM_JS_VISUALIZATIONS,
     'dateFormat': DATE_FORMAT,
     'dateTimeFormat': "{0} HH:mm".format(DATE_FORMAT),
     'allowAllToEditQueries': FEATURE_ALLOW_ALL_TO_EDIT_QUERIES,
