@@ -1,6 +1,12 @@
 # Change Log
 
-## [Unreleased]
+## UNRELEASED
+
+### Fixed
+
+- Fix: chart embeds were not rendering in PhantomJS.
+
+## v1.0.1 - 2017-04-02
 
 ### Added
 
@@ -19,6 +25,8 @@
 
 ### Fixed
 
+- Fix: optimize queries to avoid N+1 queries.
+- Fix: percent stacking math was wrong. @spasovski
 - Fix: set query filter to match value from URL query string. @benmargo
 - [Clickhouse] Fix: detection of various data types. @denisov-vlad
 - Fix: user can't edit their own alert.
