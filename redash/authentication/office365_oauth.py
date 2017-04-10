@@ -5,6 +5,7 @@ from flask_login import login_user
 from flask_oauthlib.client import OAuth
 from redash import models, settings
 from redash.authentication.org_resolving import current_org
+from sqlalchemy.orm.exc import NoResultFound
 
 logger = logging.getLogger('office365_oauth')
 
