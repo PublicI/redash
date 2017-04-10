@@ -56,17 +56,18 @@ def verify_profile(org, profile):
 
     return False
 
-
 def create_and_login_user(org, name, email):
     try:
         user_object = models.User.get_by_email_and_org(email, org)
         if user_object.name != name:
             logger.debug("Updating user name (%r -> %r)", user_object.name, name)
             user_object.name = name
-            user_object.save()
+            user_object.commit()
     except NoResultFound:
         logger.debug("Creating user object (%r)", name)
-        user_object = models.User.create(org=org, name=name, email=email, groups=[org.default_group.id])
+        user_object = models.User(org=org, name=name, email=email, group_ids=[org.default_group.id])
+        models.db.session.add(user_object)
+        models.db.session.commit()
 
     login_user(user_object, remember=True)
 
