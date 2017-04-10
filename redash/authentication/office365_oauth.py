@@ -63,7 +63,7 @@ def create_and_login_user(org, name, email):
             logger.debug("Updating user name (%r -> %r)", user_object.name, name)
             user_object.name = name
             user_object.save()
-    except models.User.DoesNotExist:
+    except NoResultFound:
         logger.debug("Creating user object (%r)", name)
         user_object = models.User.create(org=org, name=name, email=email, groups=[org.default_group.id])
 
