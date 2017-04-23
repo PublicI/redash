@@ -19,7 +19,9 @@ scheduler() {
 }
 
 server() {
-  exec /usr/local/bin/gunicorn -b 0.0.0.0:5000 --name redash -w 4 -t 90 redash.wsgi:app
+  WEB_CONCURRENCY=${WEB_CONCURRENCY:-4}
+
+  exec /usr/local/bin/gunicorn -b 0.0.0.0:5000 --name redash -k gevent redash.wsgi:app
 }
 
 help() {
