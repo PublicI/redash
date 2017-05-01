@@ -21,7 +21,7 @@ scheduler() {
 server() {
   WEB_CONCURRENCY=${WEB_CONCURRENCY:-4}
 
-  exec /usr/local/bin/gunicorn -b 0.0.0.0:5000 --name redash --timeout 1200 redash.wsgi:app
+  exec /usr/local/bin/gunicorn -b 0.0.0.0:5000 --name redash --timeout 10 redash.wsgi:app
 }
 
 help() {
