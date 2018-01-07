@@ -1,11 +1,9 @@
 import hashlib
 import logging
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import abort, flash, redirect, render_template, request, url_for
+
 from flask_login import current_user, login_required, login_user, logout_user
-
-from sqlalchemy.orm.exc import NoResultFound
-
 from redash import __version__, limiter, models, settings
 from redash.authentication import current_org, get_login_url
 from redash.authentication.account import (BadSignature, SignatureExpired,
@@ -14,15 +12,10 @@ from redash.authentication.account import (BadSignature, SignatureExpired,
 from redash.handlers import routes
 from redash.handlers.base import json_response, org_scoped_rule
 from redash.version_check import get_latest_version
+from sqlalchemy.orm.exc import NoResultFound
 
 logger = logging.getLogger(__name__)
 
-def get_office365_auth_url(next_path):
-    if settings.MULTI_ORG:
-        office365_auth_url = url_for('office365_oauth.authorize_org', next=next_path, org_slug=current_org.slug)
-    else:
-        office365_auth_url = url_for('office365_oauth.authorize', next=next_path)
-    return office365_auth_url
 
 def get_google_auth_url(next_path):
     if settings.MULTI_ORG:
@@ -66,11 +59,7 @@ def render_token_login_page(template, org_slug, token):
         google_auth_url = get_google_auth_url(url_for('redash.index', org_slug=org_slug))
     else:
         google_auth_url = ''
-    if settings.OFFICE365_OAUTH_ENABLED:
-        office365_auth_url = get_office365_auth_url(url_for('redash.index', org_slug=org_slug))
-    else:
-        office365_auth_url = ''
-    return render_template(template, office365_auth_url=office365_auth_url, google_auth_url=google_auth_url, user=user), status_code
+    return render_template(template, google_auth_url=google_auth_url, user=user), status_code
 
 
 @routes.route(org_scoped_rule('/invite/<token>'), methods=['GET', 'POST'])
@@ -85,6 +74,9 @@ def reset(token, org_slug=None):
 
 @routes.route(org_scoped_rule('/forgot'), methods=['GET', 'POST'])
 def forgot_password(org_slug=None):
+    if not current_org.get_setting('auth_password_login_enabled'):
+        abort(404)
+
     submitted = False
     if request.method == 'POST' and request.form['email']:
         submitted = True
@@ -114,11 +106,13 @@ def login(org_slug=None):
     if current_user.is_authenticated:
         return redirect(next_path)
 
-    if not settings.PASSWORD_LOGIN_ENABLED:
+    if not current_org.get_setting('auth_password_login_enabled'):
         if settings.REMOTE_USER_LOGIN_ENABLED:
             return redirect(url_for("remote_user_auth.login", next=next_path))
-        elif settings.SAML_LOGIN_ENABLED:
+        elif current_org.get_setting('auth_saml_enabled'):  # settings.SAML_LOGIN_ENABLED:
             return redirect(url_for("saml_auth.sp_initiated", next=next_path))
+        elif settings.LDAP_LOGIN_ENABLED:
+            return redirect(url_for("ldap_auth.login", next=next_path))
         else:
             return redirect(url_for("google_oauth.authorize", next=next_path))
 
@@ -136,18 +130,16 @@ def login(org_slug=None):
             flash("Wrong email or password.")
 
     google_auth_url = get_google_auth_url(next_path)
-    office365_auth_url = get_office365_auth_url(next_path)
 
     return render_template("login.html",
                            org_slug=org_slug,
                            next=next_path,
-                           username=request.form.get('username', ''),
+                           email=request.form.get('email', ''),
                            show_google_openid=settings.GOOGLE_OAUTH_ENABLED,
-                           show_office365_oauth=settings.OFFICE365_OAUTH_ENABLED,
                            google_auth_url=google_auth_url,
-                           office365_auth_url=office365_auth_url,
-                           show_saml_login=settings.SAML_LOGIN_ENABLED,
-                           show_remote_user_login=settings.REMOTE_USER_LOGIN_ENABLED)
+                           show_saml_login=current_org.get_setting('auth_saml_enabled'),
+                           show_remote_user_login=settings.REMOTE_USER_LOGIN_ENABLED,
+                           show_ldap_login=settings.LDAP_LOGIN_ENABLED)
 
 
 @routes.route(org_scoped_rule('/logout'))
@@ -166,7 +158,7 @@ def base_href():
 
 
 def client_config():
-    if not isinstance(current_user._get_current_object(), models.ApiUser) and current_user.is_authenticated:
+    if not current_user.is_api_user() and current_user.is_authenticated:
         client_config = {
             'newVersionAvailable': get_latest_version(),
             'version': __version__
@@ -174,7 +166,19 @@ def client_config():
     else:
         client_config = {}
 
-    client_config.update(settings.COMMON_CLIENT_CONFIG)
+    date_format = current_org.get_setting('date_format')
+
+    defaults = {
+        'allowScriptsInUserInput': settings.ALLOW_SCRIPTS_IN_USER_INPUT,
+        'showPermissionsControl': settings.FEATURE_SHOW_PERMISSIONS_CONTROL,
+        'allowCustomJSVisualizations': settings.FEATURE_ALLOW_CUSTOM_JS_VISUALIZATIONS,
+        'autoPublishNamedQueries': settings.FEATURE_AUTO_PUBLISH_NAMED_QUERIES,
+        'dateFormat': date_format,
+        'dateTimeFormat': "{0} HH:mm".format(date_format),
+        'mailSettingsMissing': settings.MAIL_DEFAULT_SENDER is None
+    }
+
+    client_config.update(defaults)
     client_config.update({
         'basePath': base_href()
     })
@@ -182,7 +186,7 @@ def client_config():
     return client_config
 
 
-@routes.route(org_scoped_rule('/api/config'), methods=['GET'])
+@routes.route('/api/config', methods=['GET'])
 def config(org_slug=None):
     return json_response({
         'org_slug': current_org.slug,
@@ -193,22 +197,19 @@ def config(org_slug=None):
 @routes.route(org_scoped_rule('/api/session'), methods=['GET'])
 @login_required
 def session(org_slug=None):
-    if not isinstance(current_user._get_current_object(), models.ApiUser):
-        email_md5 = hashlib.md5(current_user.email.lower()).hexdigest()
-        gravatar_url = "https://www.gravatar.com/avatar/%s?s=40" % email_md5
-
+    if current_user.is_api_user():
         user = {
-            'gravatar_url': gravatar_url,
+            'permissions': [],
+            'apiKey': current_user.id
+        }
+    else:
+        user = {
+            'profile_image_url': current_user.profile_image_url,
             'id': current_user.id,
             'name': current_user.name,
             'email': current_user.email,
             'groups': current_user.group_ids,
             'permissions': current_user.permissions
-        }
-    else:
-        user = {
-            'permissions': [],
-            'apiKey': current_user.id
         }
 
     return json_response({

@@ -1,40 +1,80 @@
+import cStringIO
+import csv
 import datetime
 import functools
 import hashlib
 import itertools
 import json
 import logging
-import cStringIO
-import csv
-import xlsxwriter
+import time
 
 from funcy import project
+
+import xlsxwriter
+from flask_login import AnonymousUserMixin, UserMixin
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import UserMixin, AnonymousUserMixin
+from passlib.apps import custom_app_context as pwd_context
+from redash import settings, redis_connection, utils
+from redash.destinations import (get_configuration_schema_for_destination_type,
+                                 get_destination)
+from redash.metrics import database  # noqa: F401
+from redash.permissions import has_access, view_only
+from redash.query_runner import (get_configuration_schema_for_query_runner_type,
+                                 get_query_runner)
+from redash.utils import generate_token, json_dumps
+from redash.utils.comparators import CaseInsensitiveComparator
+from redash.utils.configuration import ConfigurationContainer
+from redash.settings.organization import settings as org_settings
+from sqlalchemy import distinct, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.event import listens_for
-from sqlalchemy.inspection import inspect
-from sqlalchemy.types import TypeDecorator
 from sqlalchemy.ext.mutable import Mutable
-from sqlalchemy.orm import object_session, backref, joinedload, subqueryload
-# noinspection PyUnresolvedReferences
-from sqlalchemy.orm.exc import NoResultFound
-from sqlalchemy import or_
+from sqlalchemy.inspection import inspect
+from sqlalchemy.orm import backref, joinedload, object_session, subqueryload
+from sqlalchemy.orm.exc import NoResultFound  # noqa: F401
+from sqlalchemy.types import TypeDecorator
+from sqlalchemy.orm.attributes import flag_modified
+from functools import reduce
 
-from passlib.apps import custom_app_context as pwd_context
 
-from redash import redis_connection, utils
-from redash.destinations import get_destination, get_configuration_schema_for_destination_type
-from redash.permissions import has_access, view_only
-from redash.query_runner import get_query_runner, get_configuration_schema_for_query_runner_type
-from redash.utils import generate_token, json_dumps
-from redash.utils.configuration import ConfigurationContainer
-from redash.metrics import database
+class SQLAlchemyExt(SQLAlchemy):
+    def apply_pool_defaults(self, app, options):
+        if settings.SQLALCHEMY_DISABLE_POOL:
+            from sqlalchemy.pool import NullPool
+            options['poolclass'] = NullPool
+        else:
+            return super(SQLAlchemyExt, self).apply_pool_defaults(app, options)
 
-db = SQLAlchemy(session_options={
+
+db = SQLAlchemyExt(session_options={
     'expire_on_commit': False
 })
+
 Column = functools.partial(db.Column, nullable=False)
+
+
+class ScheduledQueriesExecutions(object):
+    KEY_NAME = 'sq:executed_at'
+
+    def __init__(self):
+        self.executions = {}
+
+    def refresh(self):
+        self.executions = redis_connection.hgetall(self.KEY_NAME)
+
+    def update(self, query_id):
+        redis_connection.hmset(self.KEY_NAME, {
+            query_id: time.time()
+        })
+
+    def get(self, query_id):
+        timestamp = self.executions.get(str(query_id))
+        if timestamp:
+            timestamp = utils.dt_from_timestamp(timestamp)
+
+        return timestamp
+
+scheduled_queries_executions = ScheduledQueriesExecutions()
 
 # AccessPermission and Change use a 'generic foreign key' approach to refer to
 # either queries or dashboards.
@@ -201,6 +241,9 @@ class AnonymousUser(AnonymousUserMixin, PermissionsCheckMixin):
     def permissions(self):
         return []
 
+    def is_api_user(self):
+        return False
+
 
 class ApiUser(UserMixin, PermissionsCheckMixin):
     def __init__(self, api_key, org, groups, name=None):
@@ -217,6 +260,9 @@ class ApiUser(UserMixin, PermissionsCheckMixin):
 
     def __repr__(self):
         return u"<{}>".format(self.name)
+
+    def is_api_user(self):
+        return True
 
     @property
     def permissions(self):
@@ -264,6 +310,33 @@ class Organization(TimestampMixin, db.Model):
     @property
     def is_public(self):
         return self.settings.get(self.SETTING_IS_PUBLIC, False)
+
+    @property
+    def is_disabled(self):
+        return self.settings.get('is_disabled', False)
+
+    def disable(self):
+        self.settings['is_disabled'] = True
+
+    def enable(self):
+        self.settings['is_disabled'] = False
+
+    def set_setting(self, key, value):
+        if key not in org_settings:
+            raise KeyError(key)
+
+        self.settings.setdefault('settings', {})
+        self.settings['settings'][key] = value
+        flag_modified(self, 'settings')
+
+    def get_setting(self, key):
+        if key in self.settings.get('settings', {}):
+            return self.settings['settings'][key]
+
+        if key in org_settings:
+            return org_settings[key]
+
+        raise KeyError(key)
 
     @property
     def admin_group(self):
@@ -320,14 +393,35 @@ class Group(db.Model, BelongsToOrgMixin):
         return unicode(self.id)
 
 
+class LowercasedString(TypeDecorator):
+    """
+    A lowercased string
+    """
+    impl = db.String
+    comparator_factory = CaseInsensitiveComparator
+
+    def __init__(self, length=320, *args, **kwargs):
+        super(LowercasedString, self).__init__(length=length, *args, **kwargs)
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            return value.lower()
+        return value
+
+    @property
+    def python_type(self):
+        return self.impl.type.python_type
+
+
 class User(TimestampMixin, db.Model, BelongsToOrgMixin, UserMixin, PermissionsCheckMixin):
     id = Column(db.Integer, primary_key=True)
     org_id = Column(db.Integer, db.ForeignKey('organizations.id'))
     org = db.relationship(Organization, backref=db.backref("users", lazy="dynamic"))
     name = Column(db.String(320))
-    email = Column(db.String(320))
+    email = Column(LowercasedString)
+    _profile_image_url = Column('profile_image_url', db.String(320), nullable=True)
     password_hash = Column(db.String(128), nullable=True)
-    #XXX replace with association table
+    # XXX replace with association table
     group_ids = Column('groups', MutableList.as_mutable(postgresql.ARRAY(db.Integer)), nullable=True)
     api_key = Column(db.String(40),
                      default=lambda: generate_token(40),
@@ -337,6 +431,8 @@ class User(TimestampMixin, db.Model, BelongsToOrgMixin, UserMixin, PermissionsCh
     __table_args__ = (db.Index('users_org_id_email', 'org_id', 'email', unique=True),)
 
     def __init__(self, *args, **kwargs):
+        if kwargs.get('email') is not None:
+            kwargs['email'] = kwargs['email'].lower()
         super(User, self).__init__(*args, **kwargs)
 
     def to_dict(self, with_api_key=False):
@@ -344,7 +440,7 @@ class User(TimestampMixin, db.Model, BelongsToOrgMixin, UserMixin, PermissionsCh
             'id': self.id,
             'name': self.name,
             'email': self.email,
-            'gravatar_url': self.gravatar_url,
+            'profile_image_url': self.profile_image_url,
             'groups': self.group_ids,
             'updated_at': self.updated_at,
             'created_at': self.created_at
@@ -360,10 +456,16 @@ class User(TimestampMixin, db.Model, BelongsToOrgMixin, UserMixin, PermissionsCh
 
         return d
 
+    def is_api_user(self):
+        return False
+
     @property
-    def gravatar_url(self):
+    def profile_image_url(self):
+        if self._profile_image_url is not None:
+            return self._profile_image_url
+
         email_md5 = hashlib.md5(self.email.lower()).hexdigest()
-        return "https://www.gravatar.com/avatar/%s?s=40" % email_md5
+        return "https://www.gravatar.com/avatar/{}?s=40&d=identicon".format(email_md5)
 
     @property
     def permissions(self):
@@ -474,6 +576,27 @@ class DataSource(BelongsToOrgMixin, db.Model):
         db.session.add_all([data_source, data_source_group])
         return data_source
 
+    @classmethod
+    def all(cls, org, group_ids=None):
+        data_sources = cls.query.filter(cls.org == org).order_by(cls.id.asc())
+
+        if group_ids:
+            data_sources = data_sources.join(DataSourceGroup).filter(
+                DataSourceGroup.group_id.in_(group_ids))
+
+        return data_sources
+
+    @classmethod
+    def get_by_id(cls, _id):
+        return cls.query.filter(cls.id == _id).one()
+
+    def delete(self):
+        Query.query.filter(Query.data_source == self).update(dict(data_source_id=None, latest_query_data_id=None))
+        QueryResult.query.filter(QueryResult.data_source == self).delete()
+        res = db.session.delete(self)
+        db.session.commit()
+        return res
+
     def get_schema(self, refresh=False):
         key = "data_source:schema:{}".format(self.id)
 
@@ -532,24 +655,10 @@ class DataSource(BelongsToOrgMixin, db.Model):
         return get_query_runner(self.type, self.options)
 
     @classmethod
-    def get_by_id(cls, _id):
-        return cls.query.filter(cls.id == _id).one()
-
-    @classmethod
     def get_by_name(cls, name):
         return cls.query.filter(cls.name == name).one()
 
-    @classmethod
-    def all(cls, org, group_ids=None):
-        data_sources = cls.query.filter(cls.org == org).order_by(cls.id.asc())
-
-        if group_ids:
-            data_sources = data_sources.join(DataSourceGroup).filter(
-                DataSourceGroup.group_id.in_(group_ids))
-
-        return data_sources
-
-    #XXX examine call sites to see if a regular SQLA collection would work better
+    # XXX examine call sites to see if a regular SQLA collection would work better
     @property
     def groups(self):
         groups = db.session.query(DataSourceGroup).filter(
@@ -558,7 +667,7 @@ class DataSource(BelongsToOrgMixin, db.Model):
 
 
 class DataSourceGroup(db.Model):
-    #XXX drop id, use datasource/group as PK
+    # XXX drop id, use datasource/group as PK
     id = Column(db.Integer, primary_key=True)
     data_source_id = Column(db.Integer, db.ForeignKey("data_sources.id"))
     data_source = db.relationship(DataSource, back_populates="data_source_groups")
@@ -574,7 +683,7 @@ class QueryResult(db.Model, BelongsToOrgMixin):
     org_id = Column(db.Integer, db.ForeignKey('organizations.id'))
     org = db.relationship(Organization)
     data_source_id = Column(db.Integer, db.ForeignKey("data_sources.id"))
-    data_source = db.relationship(DataSource, backref=backref('query_results', cascade="all, delete-orphan"))
+    data_source = db.relationship(DataSource, backref=backref('query_results'))
     query_hash = Column(db.String(32), index=True)
     query_text = Column('query', db.Text)
     data = Column(db.Text)
@@ -658,7 +767,7 @@ class QueryResult(db.Model, BelongsToOrgMixin):
         s = cStringIO.StringIO()
 
         query_data = json.loads(self.data)
-        writer = csv.DictWriter(s, fieldnames=[col['name'] for col in query_data['columns']])
+        writer = csv.DictWriter(s, extrasaction="ignore", fieldnames=[col['name'] for col in query_data['columns']])
         writer.writer = utils.UnicodeWriter(s)
         writer.writeheader()
         for row in query_data['rows']:
@@ -670,7 +779,7 @@ class QueryResult(db.Model, BelongsToOrgMixin):
         s = cStringIO.StringIO()
 
         query_data = json.loads(self.data)
-        book = xlsxwriter.Workbook(s)
+        book = xlsxwriter.Workbook(s, {'constant_memory': True})
         sheet = book.add_worksheet("result")
 
         column_names = []
@@ -680,7 +789,10 @@ class QueryResult(db.Model, BelongsToOrgMixin):
 
         for (r, row) in enumerate(query_data['rows']):
             for (c, name) in enumerate(column_names):
-                sheet.write(r + 1, c, row.get(name))
+                v = row.get(name)
+                if isinstance(v, list):
+                    v = str(v).encode('utf-8')
+                sheet.write(r + 1, c, v)
 
         book.close()
 
@@ -811,13 +923,16 @@ class Query(ChangeTrackingMixin, TimestampMixin, BelongsToOrgMixin, db.Model):
 
     @classmethod
     def all_queries(cls, group_ids, user_id=None, drafts=False):
+        query_ids = (db.session.query(distinct(cls.id))
+                               .join(DataSourceGroup, Query.data_source_id == DataSourceGroup.data_source_id)
+                               .filter(Query.is_archived == False)
+                               .filter(DataSourceGroup.group_id.in_(group_ids)))
+
         q = (cls.query
-            .options(joinedload(Query.user),
-                     joinedload(Query.latest_query_data).load_only('runtime', 'retrieved_at'))
-            .join(DataSourceGroup, Query.data_source_id == DataSourceGroup.data_source_id)
-            .filter(Query.is_archived == False)
-            .filter(DataSourceGroup.group_id.in_(group_ids))\
-            .order_by(Query.created_at.desc()))
+                .options(joinedload(Query.user),
+                         joinedload(Query.latest_query_data).load_only('runtime', 'retrieved_at'))
+                .filter(cls.id.in_(query_ids))
+                .order_by(Query.created_at.desc()))
 
         if not drafts:
             q = q.filter(or_(Query.is_draft == False, Query.user_id == user_id))
@@ -837,11 +952,15 @@ class Query(ChangeTrackingMixin, TimestampMixin, BelongsToOrgMixin, db.Model):
 
         now = utils.utcnow()
         outdated_queries = {}
+        scheduled_queries_executions.refresh()
+
         for query in queries:
             if query.latest_query_data:
                 retrieved_at = query.latest_query_data.retrieved_at
             else:
                 retrieved_at = now
+
+            retrieved_at = scheduled_queries_executions.get(query.id) or retrieved_at
 
             if should_schedule_next(retrieved_at, now, query.schedule, query.schedule_failures):
                 key = "{}:{}".format(query.query_hash, query.data_source_id)
@@ -874,7 +993,7 @@ class Query(ChangeTrackingMixin, TimestampMixin, BelongsToOrgMixin, db.Model):
 
     @classmethod
     def recent(cls, group_ids, user_id=None, limit=20):
-        query = (cls.query.options(subqueryload(Query.user))
+        query = (cls.query
                  .filter(Event.created_at > (db.func.current_date() - 7))
                  .join(Event, Query.id == Event.object_id.cast(db.Integer))
                  .join(DataSourceGroup, Query.data_source_id == DataSourceGroup.data_source_id)
@@ -902,7 +1021,7 @@ class Query(ChangeTrackingMixin, TimestampMixin, BelongsToOrgMixin, db.Model):
 
     def fork(self, user):
         forked_list = ['org', 'data_source', 'latest_query_data', 'description',
-                       'query_text', 'query_hash']
+                       'query_text', 'query_hash', 'options']
         kwargs = {a: getattr(self, a) for a in forked_list}
         forked_query = Query.create(name=u'Copy of (#{}) {}'.format(self.id, self.name),
                                     user=user, **kwargs)
@@ -961,11 +1080,11 @@ class AccessPermission(GFKBase, db.Model):
 
     @classmethod
     def grant(cls, obj, access_type, grantee, grantor):
-        grant = cls.query.filter(cls.object_type==obj.__tablename__,
-                                 cls.object_id==obj.id,
-                                 cls.access_type==access_type,
-                                 cls.grantee==grantee,
-                                 cls.grantor==grantor).one_or_none()
+        grant = cls.query.filter(cls.object_type == obj.__tablename__,
+                                 cls.object_id == obj.id,
+                                 cls.access_type == access_type,
+                                 cls.grantee == grantee,
+                                 cls.grantor == grantor).one_or_none()
 
         if not grant:
             grant = cls(object_type=obj.__tablename__,
@@ -996,13 +1115,13 @@ class AccessPermission(GFKBase, db.Model):
                              cls.object_type == obj.__tablename__)
 
         if access_type:
-            q.filter(AccessPermission.access_type == access_type)
+            q = q.filter(AccessPermission.access_type == access_type)
 
         if grantee:
-            q.filter(AccessPermission.grantee == grantee)
+            q = q.filter(AccessPermission.grantee == grantee)
 
         if grantor:
-            q.filter(AccessPermission.grantor == grantor)
+            q = q.filter(AccessPermission.grantor == grantor)
 
         return q
 
@@ -1079,12 +1198,12 @@ class Alert(TimestampMixin, db.Model):
         return db.session.query(Alert)\
             .options(joinedload(Alert.user), joinedload(Alert.query_rel))\
             .join(Query)\
-            .join(DataSourceGroup, DataSourceGroup.data_source_id==Query.data_source_id)\
+            .join(DataSourceGroup, DataSourceGroup.data_source_id == Query.data_source_id)\
             .filter(DataSourceGroup.group_id.in_(group_ids))
 
     @classmethod
     def get_by_id_and_org(cls, id, org):
-        return db.session.query(Alert).join(Query).filter(Alert.id==id, Query.org==org).one()
+        return db.session.query(Alert).join(Query).filter(Alert.id == id, Query.org == org).one()
 
     def to_dict(self, full=True):
         d = {
@@ -1109,18 +1228,20 @@ class Alert(TimestampMixin, db.Model):
 
     def evaluate(self):
         data = json.loads(self.query_rel.latest_query_data.data)
-        # todo: safe guard for empty
-        value = data['rows'][0][self.options['column']]
-        op = self.options['op']
+        if data['rows']:
+            value = data['rows'][0][self.options['column']]
+            op = self.options['op']
 
-        if op == 'greater than' and value > self.options['value']:
-            new_state = self.TRIGGERED_STATE
-        elif op == 'less than' and value < self.options['value']:
-            new_state = self.TRIGGERED_STATE
-        elif op == 'equals' and value == self.options['value']:
-            new_state = self.TRIGGERED_STATE
+            if op == 'greater than' and value > self.options['value']:
+                new_state = self.TRIGGERED_STATE
+            elif op == 'less than' and value < self.options['value']:
+                new_state = self.TRIGGERED_STATE
+            elif op == 'equals' and value == self.options['value']:
+                new_state = self.TRIGGERED_STATE
+            else:
+                new_state = self.OK_STATE
         else:
-            new_state = self.OK_STATE
+            new_state = self.UNKNOWN_STATE
 
         return new_state
 
@@ -1266,7 +1387,7 @@ class Dashboard(ChangeTrackingMixin, TimestampMixin, BelongsToOrgMixin, db.Model
 
     @classmethod
     def get_by_slug_and_org(cls, slug, org):
-        return cls.query.filter(cls.slug == slug, cls.org==org).one()
+        return cls.query.filter(cls.slug == slug, cls.org == org).one()
 
     def __unicode__(self):
         return u"%s=%s" % (self.id, self.name)
@@ -1355,7 +1476,7 @@ class Widget(TimestampMixin, db.Model):
 
     @classmethod
     def get_by_id_and_org(cls, widget_id, org):
-        return db.session.query(cls).join(Dashboard).filter(cls.id == widget_id, Dashboard.org== org).one()
+        return db.session.query(cls).join(Dashboard).filter(cls.id == widget_id, Dashboard.org == org).one()
 
 
 class Event(db.Model):
@@ -1410,7 +1531,7 @@ class ApiKey(TimestampMixin, GFKBase, db.Model):
     org = db.relationship(Organization)
     api_key = Column(db.String(255), index=True, default=lambda: generate_token(40))
     active = Column(db.Boolean, default=True)
-    #'object' provided by GFKBase
+    # 'object' provided by GFKBase
     created_by_id = Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_by = db.relationship(User)
 
@@ -1419,11 +1540,11 @@ class ApiKey(TimestampMixin, GFKBase, db.Model):
 
     @classmethod
     def get_by_api_key(cls, api_key):
-        return cls.query.filter(cls.api_key==api_key, cls.active==True).one()
+        return cls.query.filter(cls.api_key == api_key, cls.active == True).one()
 
     @classmethod
     def get_by_object(cls, object):
-        return cls.query.filter(cls.object_type==object.__class__.__tablename__, cls.object_id==object.id, cls.active==True).first()
+        return cls.query.filter(cls.object_type == object.__class__.__tablename__, cls.object_id == object.id, cls.active == True).first()
 
     @classmethod
     def create_for_object(cls, object, user):
@@ -1440,8 +1561,9 @@ class NotificationDestination(BelongsToOrgMixin, db.Model):
     user = db.relationship(User, backref="notification_destinations")
     name = Column(db.String(255))
     type = Column(db.String(255))
-    options = Column(Configuration)
+    options = Column(ConfigurationContainer.as_mutable(Configuration))
     created_at = Column(db.DateTime(True), default=db.func.now())
+
     __tablename__ = 'notification_destinations'
     __table_args__ = (db.Index('notification_destinations_org_id_name', 'org_id',
                                'name', unique=True),)
@@ -1470,7 +1592,7 @@ class NotificationDestination(BelongsToOrgMixin, db.Model):
 
     @classmethod
     def all(cls, org):
-        notification_destinations = cls.query.filter(cls.org==org).order_by(cls.id.asc())
+        notification_destinations = cls.query.filter(cls.org == org).order_by(cls.id.asc())
 
         return notification_destinations
 
@@ -1562,6 +1684,6 @@ def init_db():
     default_group = Group(name='default', permissions=Group.DEFAULT_PERMISSIONS, org=default_org, type=Group.BUILTIN_GROUP)
 
     db.session.add_all([default_org, admin_group, default_group])
-    #XXX remove after fixing User.group_ids
+    # XXX remove after fixing User.group_ids
     db.session.commit()
     return default_org, admin_group, default_group

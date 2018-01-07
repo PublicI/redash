@@ -1,29 +1,35 @@
 /* eslint-disable */
 
-var webpack = require('webpack');
-var HtmlWebpackPlugin = require('html-webpack-plugin');
-var ExtractTextPlugin = require("extract-text-webpack-plugin");
-var WebpackBuildNotifierPlugin = require('webpack-build-notifier');
-var path = require('path');
+const webpack = require('webpack');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const ExtractTextPlugin = require("extract-text-webpack-plugin");
+const WebpackBuildNotifierPlugin = require('webpack-build-notifier');
+const LessPluginAutoPrefix = require('less-plugin-autoprefix');
+const path = require('path');
 
-var redashBackend = process.env.REDASH_BACKEND || 'http://localhost:5000';
+const redashBackend = process.env.REDASH_BACKEND || 'http://localhost:5000';
 
-var config = {
+const config = {
   entry: {
-    app: './client/app/index.js'
+    app: ['./client/app/index.js', './client/app/assets/less/main.less'],
   },
   output: {
-    // path: process.env.NODE_ENV === 'production' ? './dist' : './dev',
-    path: './client/dist',
-    filename: '[name].[chunkhash].js',
+    path: path.join(__dirname, 'client', 'dist'),
+    filename: '[name].js',
+    publicPath: '/'
   },
-
+  resolve: {
+    alias: {
+      '@': path.join(__dirname, 'client/app')
+    }
+  },
   plugins: [
     new WebpackBuildNotifierPlugin({title: 'Redash'}),
     new webpack.DefinePlugin({
       ON_TEST: process.env.NODE_ENV === 'test'
     }),
-    new webpack.optimize.DedupePlugin(),
+    // Enforce angular to use jQuery instead of jqLite
+    new webpack.ProvidePlugin({'window.jQuery': 'jquery'}),
     new webpack.optimize.CommonsChunkPlugin({
       name: 'vendor',
       minChunks: function (module, count) {
@@ -44,83 +50,101 @@ var config = {
       chunks: ['vendor']
     }),
     new HtmlWebpackPlugin({
-      // template: __dirname + '/app/' + 'index.html'
       template: './client/app/index.html'
     }),
-    new ExtractTextPlugin('styles.[chunkhash].css')
+    new HtmlWebpackPlugin({
+      template: './client/app/multi_org.html',
+      filename: 'multi_org.html'
+    }),
+    new ExtractTextPlugin({
+      filename: 'styles.[chunkhash].css'
+    })
   ],
 
   module: {
-    loaders: [
-      {test: /\.js$/, loader: 'ng-annotate!babel!eslint', exclude: /node_modules/},
-      {test: /\.html$/, loader: 'raw', exclude: [/node_modules/, /index\.html/]},
-      // {test: /\.css$/, loader: 'style!css', exclude: /node_modules/},
-      {test: /\.css$/, loader: ExtractTextPlugin.extract("css-loader")},
+    rules: [
       {
-        test: /\.scss$/,
-        loader: ExtractTextPlugin.extract(["css-loader", "sass-loader"])
+        test: /\.js$/,
+        exclude: /node_modules/,
+        use: ['babel-loader', 'eslint-loader']
+      },
+      {
+        test: /\.html$/,
+        exclude: [/node_modules/, /index\.html/],
+        use: [{
+          loader: 'raw-loader'
+        }]
+      },
+      {
+        test: /\.css$/,
+        use: ExtractTextPlugin.extract([{
+          loader: 'css-loader',
+          options: {
+            minimize: process.env.NODE_ENV === 'production'
+          }
+        }])
+      },
+      {
+        test: /\.less$/,
+        use: ExtractTextPlugin.extract([
+          {
+            loader: 'css-loader',
+            options: {
+              minimize: process.env.NODE_ENV === 'production'
+            }
+          }, {
+            loader: 'less-loader',
+            options: {
+              plugins: [
+                new LessPluginAutoPrefix({browsers: ['last 3 versions']})
+              ]
+            }
+          }
+        ])
       },
       {
         test: /\.(png|jpe?g|gif|svg)(\?.*)?$/,
-        loader: 'url',
-        query: {
-          limit: 10000,
-          name: 'img/[name].[hash:7].[ext]'
-        }
+        use: [{
+          loader: 'url-loader',
+          options: {
+            limit: 10000,
+            name: 'img/[name].[hash:7].[ext]'
+          }
+        }]
       },
       {
         test: /\.(woff2?|eot|ttf|otf)(\?.*)?$/,
-        loader: 'url',
-        query: {
-          limit: 10000,
-          name: 'fonts/[name].[hash:7].[ext]'
-        }
+        use: [{
+          loader: 'url-loader',
+          options: {
+            limit: 10000,
+            name: 'fonts/[name].[hash:7].[ext]'
+          }
+        }]
       }
-
     ]
   },
   devtool: 'cheap-eval-module-source-map',
+  stats: {
+    modules: false,
+    chunkModules: false,
+  },
   devServer: {
     inline: true,
     historyApiFallback: true,
-    proxy: {
-      '/login': {
-        target: redashBackend + '/',
-        secure: false
-      },
-      '/invite': {
-        target: redashBackend + '/',
-        secure: false
-      },
-      '/setup': {
-        target: redashBackend + '/',
-        secure: false
-      },
-      '/images': {
-        target: redashBackend + '/',
-        secure: false
-      },
-      '/js': {
-        target: redashBackend + '/',
-        secure: false
-      },
-      '/styles': {
-        target: redashBackend + '/',
-        secure: false
-      },
-      '/status.json': {
-        target: redashBackend + '/',
-        secure: false
-      },
-      '/api/admin': {
-        target: redashBackend + '/',
-        secure: false
-      },
-      '/api': {
-        target: redashBackend,
-        secure: false
-      }
-    }
+    contentBase: path.join(__dirname, 'client', 'app'),
+    proxy: [{
+      context: [
+        '/login', '/invite', '/setup', '/images', '/js', '/styles',
+        '/status.json', '/api', '/oauth'],
+      target: redashBackend + '/',
+      changeOrigin: true,
+      secure: false,
+    }],
+    stats: {
+      modules: false,
+      chunkModules: false,
+    },
   }
 };
 
@@ -130,7 +154,13 @@ if (process.env.DEV_SERVER_HOST) {
 
 if (process.env.NODE_ENV === 'production') {
   config.output.path = __dirname + '/client/dist';
-  config.plugins.push(new webpack.optimize.UglifyJsPlugin());
+  config.output.filename = '[name].[chunkhash].js';
+  config.plugins.push(new webpack.optimize.UglifyJsPlugin({
+    sourceMap: true,
+    compress: {
+      warnings: true
+    }
+  }));
   config.devtool = 'source-map';
 }
 

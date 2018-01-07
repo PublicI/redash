@@ -8,7 +8,6 @@ from flask import redirect, request, jsonify, url_for
 
 from redash import models, settings
 from redash.authentication.org_resolving import current_org
-from redash.authentication import office365_oauth, google_oauth, saml_auth, remote_user_auth
 from redash.tasks import record_event
 
 login_manager = LoginManager()
@@ -16,7 +15,9 @@ logger = logging.getLogger('authentication')
 
 
 def get_login_url(external=False, next="/"):
-    if settings.MULTI_ORG:
+    if settings.MULTI_ORG and current_org == None:
+        login_url = '/'
+    elif settings.MULTI_ORG:
         login_url = url_for('redash.login', org_slug=current_org.slug, next=next, _external=external)
     else:
         login_url = url_for('redash.login', next=next, _external=external)
@@ -138,14 +139,16 @@ def redirect_to_login():
 
 
 def setup_authentication(app):
+    from redash.authentication import google_oauth, saml_auth, remote_user_auth, ldap_auth
+
     login_manager.init_app(app)
     login_manager.anonymous_user = models.AnonymousUser
 
     app.secret_key = settings.COOKIE_SECRET
     app.register_blueprint(google_oauth.blueprint)
-    app.register_blueprint(office365_oauth.blueprint)
     app.register_blueprint(saml_auth.blueprint)
     app.register_blueprint(remote_user_auth.blueprint)
+    app.register_blueprint(ldap_auth.blueprint)
 
     user_logged_in.connect(log_user_logged_in)
 
@@ -156,5 +159,3 @@ def setup_authentication(app):
     else:
         logger.warning("Unknown authentication type ({}). Using default (HMAC).".format(settings.AUTH_TYPE))
         login_manager.request_loader(hmac_load_user_from_request)
-
-
