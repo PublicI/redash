@@ -125,8 +125,10 @@ def login(org_slug=None):
             return redirect(url_for("saml_auth.sp_initiated", next=next_path))
         elif settings.LDAP_LOGIN_ENABLED:
             return redirect(url_for("ldap_auth.login", next=next_path))
-        else:
+        elif settings.GOOGLE_OAUTH_ENABLED:
             return redirect(url_for("google_oauth.authorize", next=next_path))
+        elif settings.OFFICE365_OAUTH_ENABLED:
+            return redirect(url_for("office365_oauth.authorize", next=next_path))
 
     if request.method == 'POST':
         try:
