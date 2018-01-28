@@ -1,0 +1,6 @@
+pipeline:
+  gcr:
+    image: plugins/gcr
+    repo: festive-shield-189915/redash
+    tags: latest
+    secrets: [google_credentials]
