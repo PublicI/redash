@@ -1,7 +1,7 @@
 // This polyfill is needed to support PhantomJS which we use to generate PNGs from embeds.
 import 'core-js/fn/typed/array-buffer';
 
-import 'pace-progress';
+import * as Pace from 'pace-progress';
 import debug from 'debug';
 import angular from 'angular';
 import ngSanitize from 'angular-sanitize';
@@ -17,7 +17,6 @@ import 'angular-moment';
 import 'brace';
 import 'angular-ui-ace';
 import 'angular-resizable';
-import ngGridster from 'angular-gridster';
 import { each, isFunction } from 'underscore';
 
 import '@/lib/sortable';
@@ -29,6 +28,14 @@ import dateTimeFilter from '@/filters/datetime';
 import dashboardGridOptions from './dashboard-grid-options';
 
 const logger = debug('redash:config');
+
+Pace.options.shouldHandlePushState = (prevUrl, newUrl) => {
+  // Show pace progress bar only if URL path changed; when query params
+  // or hash changed - ignore that history event
+  const [prevPrefix] = prevUrl.split('?');
+  const [newPrefix] = newUrl.split('?');
+  return prevPrefix !== newPrefix;
+};
 
 const requirements = [
   ngRoute,
@@ -44,7 +51,6 @@ const requirements = [
   'angularResizable',
   vsRepeat,
   'ui.sortable',
-  ngGridster.name,
 ];
 
 const ngModule = angular.module('app', requirements);
@@ -58,6 +64,12 @@ function registerAll(context) {
     .map(module => module.default);
 
   return modules.filter(isFunction).map(f => f(ngModule));
+}
+
+function requireImages() {
+  // client/app/assets/images/<path> => /images/<path>
+  const ctx = require.context('@/assets/images/', true, /\.(png|jpe?g|gif|svg)$/);
+  ctx.keys().forEach(ctx);
 }
 
 function registerComponents() {
@@ -89,6 +101,18 @@ function registerPages() {
       });
     });
   });
+
+  ngModule.config(($routeProvider) => {
+    $routeProvider.otherwise({
+      resolve: {
+        // Ugly hack to show 404 when hitting an unknown route.
+        error: () => {
+          const error = { status: 404 };
+          throw error;
+        },
+      },
+    });
+  });
 }
 
 function registerFilters() {
@@ -97,6 +121,7 @@ function registerFilters() {
   });
 }
 
+requireImages();
 registerDirectives(ngModule);
 registerServices();
 registerFilters();

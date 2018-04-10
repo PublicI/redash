@@ -1,9 +1,9 @@
 <settings-screen>
   <email-settings-warning function="'invite emails'"></email-settings-warning>
 
-  <div ng-show="selectedTab == 'profile'" class="p-10">
+  <div ng-show="selectedTab == 'profile'">
     <div class="row">
-      <div class="col-md-4 col-md-offset-4 profile__cointainer">
+      <div class="col-md-4 col-md-offset-4 profile__container">
 
         <img ng-src="{{user.profile_image_url}}" class="profile__image"/>
 
@@ -77,12 +77,12 @@
 
           <div ng-if="passwordResetLink" class="alert alert-success">
             <p ng-if="!clientConfig.mailSettingMissing">
-              <strong>The user should receive a link to reset his password by email soon.</strong>
+              <strong>The user should receive a link to reset their password by email soon.</strong>
             </p>
             <p ng-if="clientConfig.mailSettingsMissing">
               You don't have mail server configured, please send the following link
               to {{user.name}} to reset their password:<br/>
-              <a ng-href="passwordResetLink">{{passwordResetLink}}</a>
+              <textarea class="form-control m-t-10" rows="2" readonly>{{ passwordResetLink }}</textarea>
             </p>
           </div>
         </div>

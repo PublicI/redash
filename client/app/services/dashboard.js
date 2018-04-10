@@ -1,33 +1,58 @@
-import * as _ from 'underscore';
+import _ from 'underscore';
+
+function prepareWidgetsForDashboard(widgets) {
+  // Default height for auto-height widgets.
+  // Compute biggest widget size and choose between it and some magic number.
+  // This value should be big enough so auto-height widgets will not overlap other ones.
+  const defaultWidgetSizeY = Math.max(
+    _.chain(widgets)
+      .map(w => w.options.position.sizeY)
+      .max()
+      .value(),
+    20,
+  ) + 5;
+
+  // Fix layout:
+  // 1. sort and group widgets by row
+  // 2. update position of widgets in each row - place it right below
+  //    biggest widget from previous row
+  _.chain(widgets)
+    .sortBy(widget => widget.options.position.row)
+    .groupBy(widget => widget.options.position.row)
+    .reduce((row, widgetsAtRow) => {
+      let height = 1;
+      _.each(widgetsAtRow, (widget) => {
+        height = Math.max(
+          height,
+          widget.options.position.autoHeight
+            ? defaultWidgetSizeY
+            : widget.options.position.sizeY,
+        );
+        widget.options.position.row = row;
+        if (widget.options.position.sizeY < 1) {
+          widget.options.position.sizeY = defaultWidgetSizeY;
+        }
+      });
+      return row + height;
+    }, 0)
+    .value();
+
+  // Sort widgets by updated column and row value
+  widgets = _.sortBy(widgets, widget => widget.options.position.col);
+  widgets = _.sortBy(widgets, widget => widget.options.position.row);
+
+  return widgets;
+}
 
 function Dashboard($resource, $http, currentUser, Widget, dashboardGridOptions) {
   function prepareDashboardWidgets(widgets) {
-    if (_.isArray(widgets) && (widgets.length > 0) && _.isArray(widgets[0])) {
-      // Dashboard v1 processing
-      // v1 dashboard has two columns, and widget can occupy one of them or both;
-      // this means, that there can be at most two widgets per row.
-      // Here we will map gridster columns and rows to v1-style grid
-      const dashboardV1ColumnSize = Math.round(dashboardGridOptions.columns / 2);
-      widgets = _.map(
-        widgets,
-        (row, rowIndex) => _.map(row, (widget, widgetIndex) => {
-          widget.options = widget.options || {};
-          widget.options.position = _.extend({}, {
-            row: rowIndex,
-            col: widgetIndex * dashboardV1ColumnSize,
-            sizeX: dashboardV1ColumnSize * widget.width,
-            // do not set sizeY - let widget to use defaults for visualization
-          }, widget.options.position);
-          return widget;
-        }),
-      );
-    }
-
-    return _.map(_.flatten(widgets), widget => new Widget(widget));
+    return prepareWidgetsForDashboard(_.map(widgets, widget => new Widget(widget)));
   }
 
   function transformSingle(dashboard) {
-    dashboard.widgets = prepareDashboardWidgets(dashboard.widgets);
+    if (dashboard.widgets) {
+      dashboard.widgets = prepareDashboardWidgets(dashboard.widgets);
+    }
     dashboard.publicAccessEnabled = dashboard.public_url !== undefined;
   }
 
@@ -103,6 +128,7 @@ function Dashboard($resource, $http, currentUser, Widget, dashboardGridOptions) 
   };
 
   resource.prepareDashboardWidgets = prepareDashboardWidgets;
+  resource.prepareWidgetsForDashboard = prepareWidgetsForDashboard;
 
   return resource;
 }

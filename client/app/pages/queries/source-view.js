@@ -71,14 +71,6 @@ function QuerySourceCtrl(
       .catch(error => toastr.error(error));
   };
 
-  $scope.duplicateQuery = () => {
-    Events.record('fork', 'query', $scope.query.id);
-
-    Query.fork({ id: $scope.query.id }, (newQuery) => {
-      $location.url(newQuery.getSourceLink()).replace();
-    });
-  };
-
   $scope.deleteVisualization = ($e, vis) => {
     $e.preventDefault();
 
@@ -112,6 +104,7 @@ export default function init(ngModule) {
   return {
     '/queries/new': {
       template,
+      layout: 'fixed',
       controller: 'QuerySourceCtrl',
       reloadOnSearch: false,
       resolve: {
@@ -129,6 +122,7 @@ export default function init(ngModule) {
     },
     '/queries/:queryId/source': {
       template,
+      layout: 'fixed',
       controller: 'QuerySourceCtrl',
       reloadOnSearch: false,
       resolve: {
