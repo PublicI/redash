@@ -31,12 +31,12 @@ function AuthService($window, $location, $q, $http) {
     login() {
       const next = encodeURI($location.url());
       logger('Calling login with next = %s', next);
-      window.location.href = `/login?next=${next}`;
+      window.location.href = `login?next=${next}`;
     },
     logout() {
       logger('Logout.');
       window.sessionStorage.removeItem(SESSION_ITEM);
-      $window.location.href = '/logout';
+      $window.location.href = 'logout';
     },
     loadSession() {
       logger('Loading session');
@@ -47,7 +47,7 @@ function AuthService($window, $location, $q, $http) {
       }
 
       this.setApiKey(null);
-      return $http.get('/api/session').then((response) => {
+      return $http.get('api/session').then((response) => {
         storeSession(response.data);
         return session;
       });
@@ -65,6 +65,23 @@ function AuthService($window, $location, $q, $http) {
     },
     getApiKey() {
       return this.apiKey;
+    },
+    requireSession() {
+      logger('Requested authentication');
+      if (Auth.isAuthenticated()) {
+        return $q.when(getLocalSessionData());
+      }
+      return Auth.loadSession().then(() => {
+        if (Auth.isAuthenticated()) {
+          logger('Loaded session');
+          return getLocalSessionData();
+        }
+        logger('Need to login, redirecting');
+        this.login();
+      }).catch(() => {
+        logger('Need to login, redirecting');
+        this.login();
+      });
     },
   };
 
@@ -103,7 +120,7 @@ function apiKeyHttpInterceptor($injector) {
   };
 }
 
-export default function (ngModule) {
+export default function init(ngModule) {
   ngModule.factory('Auth', AuthService);
   ngModule.service('currentUser', CurrentUserService);
   ngModule.service('clientConfig', ClientConfigService);
@@ -111,22 +128,5 @@ export default function (ngModule) {
 
   ngModule.config(($httpProvider) => {
     $httpProvider.interceptors.push('apiKeyHttpInterceptor');
-  });
-
-  ngModule.run(($location, $window, $rootScope, $route, Auth) => {
-    $rootScope.$on('$routeChangeStart', (event, to) => {
-      if (to.authenticated && !Auth.isAuthenticated()) {
-        logger('Requested authenticated route: ', to);
-        event.preventDefault();
-        // maybe we only miss the session? try to load session
-        Auth.loadSession().then(() => {
-          logger('Loaded session');
-          $route.reload();
-        }).catch(() => {
-          logger('Need to login, redirecting');
-          Auth.login();
-        });
-      }
-    });
   });
 }

@@ -1,15 +1,19 @@
 import json
-import time
 import logging
 import signal
+import time
+
+import pystache
 import redis
+
+from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from celery.result import AsyncResult
 from celery.utils.log import get_task_logger
-from redash import redis_connection, models, statsd_client, settings, utils
+from redash import models, redis_connection, settings, statsd_client, utils
+from redash.query_runner import InterruptException
 from redash.utils import gen_query_hash
 from redash.worker import celery
-from redash.query_runner import InterruptException
-from .alerts import check_alerts_for_query
+from redash.tasks.alerts import check_alerts_for_query
 
 logger = get_task_logger(__name__)
 
@@ -114,16 +118,15 @@ class QueryTaskTracker(object):
         return tasks
 
     @classmethod
-    def prune(cls, list_name, keep_count):
+    def prune(cls, list_name, keep_count, max_keys=100):
         count = redis_connection.zcard(list_name)
         if count <= keep_count:
             return 0
 
-        remove_count = count - keep_count
+        remove_count = min(max_keys, count - keep_count)
         keys = redis_connection.zrange(list_name, 0, remove_count - 1)
         redis_connection.delete(*keys)
         redis_connection.zremrangebyrank(list_name, 0, remove_count - 1)
-
         return remove_count
 
     def __getattr__(self, item):
@@ -163,7 +166,10 @@ class QueryTask(object):
 
         status = self.STATUSES[task_status]
 
-        if isinstance(result, Exception):
+        if isinstance(result, (TimeLimitExceeded, SoftTimeLimitExceeded)):
+            error = "Query exceeded Redash query execution time limit."
+            status = 4
+        elif isinstance(result, Exception):
             error = result.message
             status = 4
         elif task_status == 'REVOKED':
@@ -225,17 +231,19 @@ def enqueue_query(query, data_source, user_id, scheduled_query=None, metadata={}
             if not job:
                 pipe.multi()
 
+                time_limit = None
+
                 if scheduled_query:
                     queue_name = data_source.scheduled_queue_name
                     scheduled_query_id = scheduled_query.id
                 else:
                     queue_name = data_source.queue_name
                     scheduled_query_id = None
+                    time_limit = settings.ADHOC_QUERY_TIME_LIMIT
 
-                result = execute_query.apply_async(args=(
-                    query, data_source.id, metadata, user_id,
-                    scheduled_query_id),
-                                                   queue=queue_name)
+                result = execute_query.apply_async(args=(query, data_source.id, metadata, user_id, scheduled_query_id),
+                                                   queue=queue_name,
+                                                   time_limit=time_limit)
                 job = QueryTask(async_result=result)
                 tracker = QueryTaskTracker.create(
                     result.id, 'created', query_hash, data_source.id,
@@ -265,17 +273,28 @@ def refresh_queries():
 
     with statsd_client.timer('manager.outdated_queries_lookup'):
         for query in models.Query.outdated_queries():
-            if settings.FEATURE_DISABLE_REFRESH_QUERIES: 
+            if settings.FEATURE_DISABLE_REFRESH_QUERIES:
                 logging.info("Disabled refresh queries.")
+            elif query.org.is_disabled:
+                logging.info("Skipping refresh of %s because org is disabled.", query.id)
+            elif query.data_source is None:
+                logging.info("Skipping refresh of %s because the datasource is none.", query.id)
             elif query.data_source.paused:
                 logging.info("Skipping refresh of %s because datasource - %s is paused (%s).", query.id, query.data_source.name, query.data_source.pause_reason)
             else:
-                enqueue_query(query.query_text, query.data_source, query.user_id,
+                if query.options and len(query.options.get('parameters', [])) > 0:
+                    query_params = {p['name']: p['value']
+                                    for p in query.options['parameters']}
+                    query_text = pystache.render(query.query_text, query_params)
+                else:
+                    query_text = query.query_text
+
+                enqueue_query(query_text, query.data_source, query.user_id,
                               scheduled_query=query,
                               metadata={'Query ID': query.id, 'Username': 'Scheduled'})
 
-            query_ids.append(query.id)
-            outdated_queries_count += 1
+                query_ids.append(query.id)
+                outdated_queries_count += 1
 
     statsd_client.gauge('manager.outdated_queries', outdated_queries_count)
 
@@ -299,14 +318,6 @@ def cleanup_tasks():
     for tracker in in_progress:
         result = AsyncResult(tracker.task_id)
 
-        # If the AsyncResult status is PENDING it means there is no celery task object for this tracker, and we can
-        # mark it as "dead":
-        if result.status == 'PENDING':
-            logging.info("In progress tracker for %s is no longer enqueued, cancelling (task: %s).",
-                         tracker.query_hash, tracker.task_id)
-            _unlock(tracker.query_hash, tracker.data_source_id)
-            tracker.update(state='cancelled')
-
         if result.ready():
             logging.info("in progress tracker %s finished", tracker.query_hash)
             _unlock(tracker.query_hash, tracker.data_source_id)
@@ -322,7 +333,9 @@ def cleanup_tasks():
             tracker.update(state='finished')
 
     # Maintain constant size of the finished tasks list:
-    QueryTaskTracker.prune(QueryTaskTracker.DONE_LIST, 1000)
+    removed = 1000
+    while removed > 0:
+        removed = QueryTaskTracker.prune(QueryTaskTracker.DONE_LIST, 1000)
 
 
 @celery.task(name="redash.tasks.cleanup_query_results")
@@ -346,14 +359,30 @@ def cleanup_query_results():
     logger.info("Deleted %d unused query results.", deleted_count)
 
 
+@celery.task(name="redash.tasks.refresh_schema", time_limit=90, soft_time_limit=60)
+def refresh_schema(data_source_id):
+    ds = models.DataSource.get_by_id(data_source_id)
+    logger.info(u"task=refresh_schema state=start ds_id=%s", ds.id)
+    start_time = time.time()
+    try:
+        ds.get_schema(refresh=True)
+        logger.info(u"task=refresh_schema state=finished ds_id=%s runtime=%.2f", ds.id, time.time() - start_time)
+        statsd_client.incr('refresh_schema.success')
+    except SoftTimeLimitExceeded:
+        logger.info(u"task=refresh_schema state=timeout ds_id=%s runtime=%.2f", ds.id, time.time() - start_time)
+        statsd_client.incr('refresh_schema.timeout')
+    except Exception:
+        logger.warning(u"Failed refreshing schema for the data source: %s", ds.name, exc_info=1)
+        statsd_client.incr('refresh_schema.error')
+        logger.info(u"task=refresh_schema state=failed ds_id=%s runtime=%.2f", ds.id, time.time() - start_time)
+
+
 @celery.task(name="redash.tasks.refresh_schemas")
 def refresh_schemas():
     """
     Refreshes the data sources schemas.
     """
-
     blacklist = [int(ds_id) for ds_id in redis_connection.smembers('data_sources:schema:blacklist') if ds_id]
-
     global_start_time = time.time()
 
     logger.info(u"task=refresh_schemas state=start")
@@ -363,15 +392,10 @@ def refresh_schemas():
             logger.info(u"task=refresh_schema state=skip ds_id=%s reason=paused(%s)", ds.id, ds.pause_reason)
         elif ds.id in blacklist:
             logger.info(u"task=refresh_schema state=skip ds_id=%s reason=blacklist", ds.id)
+        elif ds.org.is_disabled:
+            logger.info(u"task=refresh_schema state=skip ds_id=%s reason=org_disabled", ds.id)
         else:
-            logger.info(u"task=refresh_schema state=start ds_id=%s", ds.id)
-            start_time = time.time()
-            try:
-                ds.get_schema(refresh=True)
-                logger.info(u"task=refresh_schema state=finished ds_id=%s runtime=%.2f", ds.id, time.time() - start_time)
-            except Exception:
-                logger.exception(u"Failed refreshing schema for the data source: %s", ds.name)
-                logger.info(u"task=refresh_schema state=failed ds_id=%s runtime=%.2f", ds.id, time.time() - start_time)
+            refresh_schema.apply_async(args=(ds.id,), queue="schemas")
 
     logger.info(u"task=refresh_schemas state=finish total_runtime=%.2f", time.time() - global_start_time)
 
@@ -406,6 +430,8 @@ class QueryExecutor(object):
                                                                                                    self.query_hash,
                                                                                                    self.data_source_id,
                                                                                                    False, metadata)
+        if self.tracker.scheduled:
+            models.scheduled_queries_executions.update(self.tracker.query_id)
 
     def run(self):
         signal.signal(signal.SIGINT, signal_handler)

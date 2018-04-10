@@ -1,12 +1,12 @@
-import simplejson as json
 import logging
 import sys
 import urllib
+
+import requests
+import simplejson as json
 from requests.auth import HTTPBasicAuth
 
 from redash.query_runner import *
-
-import requests
 
 try:
     import http.client as http_client
@@ -42,9 +42,9 @@ PYTHON_TYPES_MAPPING = {
     float: TYPE_FLOAT
 }
 
-class BaseElasticSearch(BaseQueryRunner):
 
-    DEBUG_ENABLED = True
+class BaseElasticSearch(BaseQueryRunner):
+    DEBUG_ENABLED = False
 
     @classmethod
     def configuration_schema(cls):
@@ -218,6 +218,8 @@ class BaseElasticSearch(BaseQueryRunner):
                 for value in data:
                     result_row = get_row(rows, row)
                     collect_aggregations(mappings, rows, parent_key, value, result_row, result_columns, result_columns_index)
+                    if 'doc_count' in value:
+                        collect_value(mappings, result_row, 'doc_count', value['doc_count'], 'integer')
                     if 'key' in value:
                         if 'key_as_string' in value:
                             collect_value(mappings, result_row, parent_key, value['key_as_string'], 'string')

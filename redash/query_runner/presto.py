@@ -113,12 +113,16 @@ class Presto(BaseQueryRunner):
             data = {'columns': columns, 'rows': rows}
             json_data = json.dumps(data, cls=JSONEncoder)
             error = None
-        except DatabaseError, db:
+        except DatabaseError as db:
             json_data = None
             default_message = 'Unspecified DatabaseError: {0}'.format(db.message)
             message = db.message.get('failureInfo', {'message', None}).get('message')
             error = default_message if message is None else message
-        except Exception, ex:
+        except (KeyboardInterrupt, InterruptException) as e:
+            cursor.cancel()
+            error = "Query cancelled by user."
+            json_data = None
+        except Exception as ex:
             json_data = None
             error = ex.message
             if not isinstance(error, basestring):
