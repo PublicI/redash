@@ -12,4 +12,4 @@ USER redash
 
 EXPOSE 5000
 
-CMD ["./bin/docker-entrypoint","server"]
+CMD ["/app/bin/docker-entrypoint","server"]
