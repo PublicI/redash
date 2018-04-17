@@ -133,6 +133,7 @@ def login(org_slug=None):
                            next=next_path,
                            email=request.form.get('email', ''),
                            show_google_openid=settings.GOOGLE_OAUTH_ENABLED,
+                           show_office365_oauth=settings.OFFICE365_OAUTH_ENABLED,
                            google_auth_url=google_auth_url,
                            show_password_login=current_org.get_setting('auth_password_login_enabled'),
                            show_saml_login=current_org.get_setting('auth_saml_enabled'),
@@ -177,6 +178,7 @@ def client_config():
         'dashboardRefreshIntervals': settings.DASHBOARD_REFRESH_INTERVALS,
         'queryRefreshIntervals': settings.QUERY_REFRESH_INTERVALS,
         'googleLoginEnabled': settings.GOOGLE_OAUTH_ENABLED,
+        'office365LoginEnabled': settings.GOOGLE_OAUTH_ENABLED
     }
 
     client_config.update(defaults)
