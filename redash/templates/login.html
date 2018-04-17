@@ -13,6 +13,13 @@
       {% endif %}
     {% endwith %}
 
+    {% if show_office365_oauth %}
+        <a href="{{ office365_auth_url }}" class="login-button btn btn-default btn-block">
+          <img src="/static/images/office365_logo.png">
+          Login with Office 365
+        </a>
+    {% endif %}
+
     {% if show_google_openid %}
       <a href="{{ google_auth_url }}" class="login-button btn btn-default btn-block">
         <img src="/static/images/google_logo.svg">
