@@ -60,6 +60,7 @@ def render_token_login_page(template, org_slug, token):
 
     return render_template(template,
                            show_google_openid=settings.GOOGLE_OAUTH_ENABLED,
+                           show_office365_oauth=settings.OFFICE365_OAUTH_ENABLED,
                            google_auth_url=google_auth_url,
                            show_saml_login=current_org.get_setting('auth_saml_enabled'),
                            show_remote_user_login=settings.REMOTE_USER_LOGIN_ENABLED,
