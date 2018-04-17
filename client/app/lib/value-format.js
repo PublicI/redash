@@ -9,9 +9,12 @@ const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 function createDefaultFormatter(highlightLinks) {
   if (highlightLinks) {
-    return (value) => {
+    return value => {
       if (_.isString(value)) {
-        value = value.replace(urlPattern, '$1<a href="$2" target="_blank">$2</a>');
+        value = value.replace(
+          urlPattern,
+          '$1<a href="$2" target="_blank">$2</a>'
+        );
       }
       return value;
     };
@@ -20,8 +23,8 @@ function createDefaultFormatter(highlightLinks) {
 }
 
 function createDateTimeFormatter(format) {
-  if (_.isString(format) && (format !== '')) {
-    return (value) => {
+  if (_.isString(format) && format !== '') {
+    return value => {
       if (value && moment.isMoment(value)) {
         return value.format(format);
       }
@@ -45,20 +48,25 @@ function createBooleanFormatter(values) {
 }
 
 function createNumberFormatter(format) {
-  if (_.isString(format) && (format !== '')) {
+  if (_.isString(format) && format !== '') {
     const n = numeral(0); // cache `numeral` instance
-    return value =>
-      value === null || value === '' ? '' : n.set(value).format(format);
+    return value => {
+      return value === null || value === '' ? '' : n.set(value).format(format);
+    };
   }
   return value => value;
 }
 
 export function createFormatter(column) {
   switch (column.displayAs) {
-    case 'number': return createNumberFormatter(column.numberFormat);
-    case 'boolean': return createBooleanFormatter(column.booleanValues);
-    case 'datetime': return createDateTimeFormatter(column.dateTimeFormat);
-    default: return createDefaultFormatter(column.allowHTML && column.highlightLinks);
+    case 'number':
+      return createNumberFormatter(column.numberFormat);
+    case 'boolean':
+      return createBooleanFormatter(column.booleanValues);
+    case 'datetime':
+      return createDateTimeFormatter(column.dateTimeFormat);
+    default:
+      return createDefaultFormatter(column.allowHTML && column.highlightLinks);
   }
 }
 
