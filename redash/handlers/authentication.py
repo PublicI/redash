@@ -188,7 +188,7 @@ def client_config():
         'dashboardRefreshIntervals': settings.DASHBOARD_REFRESH_INTERVALS,
         'queryRefreshIntervals': settings.QUERY_REFRESH_INTERVALS,
         'googleLoginEnabled': settings.GOOGLE_OAUTH_ENABLED,
-        'office365LoginEnabled': settings.GOOGLE_OAUTH_ENABLED
+        'office365LoginEnabled': settings.OFFICE365_OAUTH_ENABLED
     }
 
     client_config.update(defaults)
