@@ -286,8 +286,6 @@ class BaseElasticSearch(BaseQueryRunner):
 
 
 class Kibana(BaseElasticSearch):
-    def __init__(self, configuration):
-        super(Kibana, self).__init__(configuration)
 
     @classmethod
     def enabled(cls):
@@ -384,9 +382,6 @@ class Kibana(BaseElasticSearch):
 
 class ElasticSearch(BaseElasticSearch):
 
-    def __init__(self, configuration):
-        super(ElasticSearch, self).__init__(configuration)
-
     @classmethod
     def enabled(cls):
         return True
@@ -420,10 +415,9 @@ class ElasticSearch(BaseElasticSearch):
             if error:
                 return None, error
 
-            params = {"source": json.dumps(query_dict), "source_content_type": "application/json"}
             logger.debug("Using URL: %s", url)
-            logger.debug("Using params : %s", params)
-            r = requests.get(url, params=params, auth=self.auth)
+            logger.debug("Using query: %s", query_dict)
+            r = requests.get(url, json=query_dict, auth=self.auth)
             r.raise_for_status()
             logger.debug("Result: %s", r.json())
 

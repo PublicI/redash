@@ -1,4 +1,4 @@
-import { each } from 'underscore';
+import { each } from 'lodash';
 import settingsMenu from '@/lib/settings-menu';
 import { absoluteUrl } from '@/services/utils';
 import template from './show.html';
@@ -107,6 +107,13 @@ function UserCtrl(
       $scope.disablePasswordResetButton = false;
       $scope.passwordResetLink = absoluteUrl(data.reset_link);
     });
+  };
+
+  $scope.enableUser = (user) => {
+    User.enableUser(user);
+  };
+  $scope.disableUser = (user) => {
+    User.disableUser(user);
   };
 }
 

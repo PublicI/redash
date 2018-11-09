@@ -1,85 +1,97 @@
-import _ from 'underscore';
+import { isString, extend } from 'lodash';
 
-import { Paginator } from '@/lib/pagination';
+import { LivePaginator } from '@/lib/pagination';
 import template from './dashboard-list.html';
 import './dashboard-list.css';
 
+class DashboardListCtrl {
+  constructor($scope, currentUser, $location, Dashboard) {
+    const page = parseInt($location.search().page || 1, 10);
 
-function DashboardListCtrl(Dashboard, $location) {
-  const TAGS_REGEX = /(^([\w\s]|[^\u0000-\u007F])+):|(#([\w-]|[^\u0000-\u007F])+)/ig;
+    const orderSeparator = '-';
+    this.pageOrder = $location.search().order || '-created_at';
+    this.pageOrderReverse = this.pageOrder.startsWith(orderSeparator);
+    if (this.pageOrderReverse) {
+      this.pageOrder = this.pageOrder.substr(1);
+    }
 
-  const page = parseInt($location.search().page || 1, 10);
+    // use $parent because we're using a component as route target instead of controller;
+    // $parent refers to scope created for the page by router
+    this.resource = $scope.$parent.$resolve.resource;
+    this.currentPage = $scope.$parent.$resolve.currentPage;
 
-  this.defaultOptions = {};
-  this.dashboards = Dashboard.query({}); // shared promise
+    this.defaultOptions = {};
 
-  this.selectedTags = []; // in scope because it needs to be accessed inside a table refresh
-  this.searchText = '';
+    this.searchText = $location.search().q;
 
-  this.tagIsSelected = tag => this.selectedTags.indexOf(tag) > -1;
+    this.currentUser = currentUser;
 
-  this.toggleTag = ($event, tag) => {
-    if (this.tagIsSelected(tag)) {
-      if ($event.shiftKey) {
-        this.selectedTags = this.selectedTags.filter(e => e !== tag);
+    this.selectedTags = new Set();
+    this.onTagsUpdate = (tags) => {
+      this.selectedTags = tags;
+      this.update();
+    };
+
+    this.showEmptyState = false;
+    this.loaded = false;
+
+    const setSearchOrClear = (name, value) => {
+      if (value) {
+        $location.search(name, value);
       } else {
-        this.selectedTags = [];
+        $location.search(name, undefined);
       }
-    } else if ($event.shiftKey) {
-      this.selectedTags.push(tag);
-    } else {
-      this.selectedTags = [tag];
-    }
+    };
 
-    this.update();
-  };
+    const fetcher = (requestedPage, itemsPerPage, orderByField, orderByReverse, paginator) => {
+      $location.search('page', requestedPage);
 
-  this.allTags = [];
-  this.showList = false;
-  this.showEmptyState = false;
+      if (orderByReverse && !orderByField.startsWith(orderSeparator)) {
+        orderByField = orderSeparator + orderByField;
+      }
+      setSearchOrClear('order', orderByField);
 
-  this.dashboards.$promise.then((data) => {
-    if (data.length > 0) {
-      this.showList = true;
-    } else {
-      this.showEmptyState = true;
-    }
-    const out = data.map(dashboard => dashboard.name.match(TAGS_REGEX));
-    this.allTags = _.unique(_.flatten(out)).filter(e => e).map(tag => tag.replace(/:$/, ''));
-    this.allTags.sort();
-  });
-
-  this.paginator = new Paginator([], { page });
-
-  this.update = () => {
-    this.dashboards.$promise.then((data) => {
-      data = _.sortBy(data, 'name');
-      const filteredDashboards = data.map((dashboard) => {
-        dashboard.tags = (dashboard.name.match(TAGS_REGEX) || []).map(tag => tag.replace(/:$/, ''));
-        dashboard.untagged_name = dashboard.name.replace(TAGS_REGEX, '').trim();
-        return dashboard;
-      }).filter((value) => {
-        if (this.selectedTags.length) {
-          const valueTags = new Set(value.tags);
-          const tagMatch = this.selectedTags;
-          const filteredMatch = tagMatch.filter(x => valueTags.has(x));
-          if (tagMatch.length !== filteredMatch.length) {
-            return false;
-          }
-        }
-        if (this.searchText && this.searchText.length) {
-          if (!value.untagged_name.toLowerCase().includes(this.searchText.toLowerCase())) {
-            return false;
-          }
-        }
-        return true;
+      const request = Object.assign({}, this.defaultOptions, {
+        page: requestedPage,
+        page_size: itemsPerPage,
+        tags: [...this.selectedTags], // convert Set to Array
+        order: orderByField,
       });
 
-      this.paginator.updateRows(filteredDashboards, data.count);
-    });
-  };
+      if (isString(this.searchText) && this.searchText !== '') {
+        request.q = this.searchText;
+      }
 
-  this.update();
+      this.loaded = false;
+      return this.resource(request).$promise.then((data) => {
+        this.loaded = true;
+        const rows = data.results.map(d => new Dashboard(d));
+        paginator.updateRows(rows, data.count);
+        this.showEmptyState = data.count === 0;
+      });
+    };
+
+    this.paginator = new LivePaginator(fetcher, {
+      page,
+      itemsPerPage: this.pageSize,
+      orderByField: this.pageOrder,
+      orderByReverse: this.pageOrderReverse,
+    });
+
+    this.navigateTo = ($event, url) => {
+      if ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey) {
+        // keep default browser behavior
+        return;
+      }
+      $event.preventDefault();
+      $location.url(url);
+    };
+
+    this.update = () => {
+      // trigger paginator refresh
+      this.paginator.setPage(page);
+    };
+  }
 }
 
 export default function init(ngModule) {
@@ -91,10 +103,36 @@ export default function init(ngModule) {
   const route = {
     template: '<page-dashboard-list></page-dashboard-list>',
     reloadOnSearch: false,
-    title: 'Dashboards',
   };
 
   return {
-    '/dashboards': route,
+    '/dashboards': extend(
+      {
+        title: 'Dashboards',
+        resolve: {
+          currentPage: () => 'all',
+          resource(Dashboard) {
+            'ngInject';
+
+            return Dashboard.query.bind(Dashboard);
+          },
+        },
+      },
+      route,
+    ),
+    '/dashboards/favorites': extend(
+      {
+        title: 'Favorite Dashboards',
+        resolve: {
+          currentPage: () => 'favorites',
+          resource(Dashboard) {
+            'ngInject';
+
+            return Dashboard.favorites.bind(Dashboard);
+          },
+        },
+      },
+      route,
+    ),
   };
 }
