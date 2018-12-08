@@ -22,38 +22,38 @@ spec:
         component: server
         release: {{ .Release.Name }}
     spec:
-      initContainers:
-        - name: {{ template "redash.name" . }}-server-createdb
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["bash", "/config/createdb.sh"]
-          volumeMounts:
-            - name: config
-              mountPath: /config
-          env:
-            - name: REDASH_COOKIE_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ template "redash.fullname" . }}
-                  key: cookieSecret
-            - name: REDASH_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ template "redash.fullname" . }}
-                  key: postgresURL
-            - name: REDASH_REDIS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ template "redash.fullname" . }}
-                  key: redisURL
-          {{- range $key, $value := .Values.env }}
-            - name: "{{ $key }}"
-              value: "{{ $value }}"
-          {{- end }}
-          {{- range $key, $value := .Values.server.env }}
-            - name: "{{ $key }}"
-              value: "{{ $value }}"
-          {{- end }}
+      # initContainers:
+      #   - name: {{ template "redash.name" . }}-server-createdb
+      #     image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      #     imagePullPolicy: {{ .Values.image.pullPolicy }}
+      #     command: ["bash", "/config/createdb.sh"]
+      #     volumeMounts:
+      #       - name: config
+      #         mountPath: /config
+      #     env:
+      #       - name: REDASH_COOKIE_SECRET
+      #         valueFrom:
+      #           secretKeyRef:
+      #             name: {{ template "redash.fullname" . }}
+      #             key: cookieSecret
+      #       - name: REDASH_DATABASE_URL
+      #         valueFrom:
+      #           secretKeyRef:
+      #             name: {{ template "redash.fullname" . }}
+      #             key: postgresURL
+      #       - name: REDASH_REDIS_URL
+      #         valueFrom:
+      #           secretKeyRef:
+      #             name: {{ template "redash.fullname" . }}
+      #             key: redisURL
+      #     {{- range $key, $value := .Values.env }}
+      #       - name: "{{ $key }}"
+      #         value: "{{ $value }}"
+      #     {{- end }}
+      #     {{- range $key, $value := .Values.server.env }}
+      #       - name: "{{ $key }}"
+      #         value: "{{ $value }}"
+      #     {{- end }}
       containers:
         - name: {{ template "redash.name" . }}-server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -107,10 +107,10 @@ spec:
             failureThreshold: 3
           resources:
 {{ toYaml .Values.server.resources | indent 12 }}
-      volumes:
-        - name: config
-          configMap:
-            name: {{ template "redash.fullname" . }}
+      # volumes:
+      #   - name: config
+      #     configMap:
+      #       name: {{ template "redash.fullname" . }}
     {{- with .Values.server.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
