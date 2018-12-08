@@ -73,7 +73,7 @@ ingress:
     # kubernetes.io/tls-acme: "true"
   path: /
   hosts:
-    - dash.fivetwentyseven.com
+    - example.local
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:
