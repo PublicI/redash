@@ -5,18 +5,18 @@ pipeline:
     secrets: [ docker_username, docker_password ]
     repo: publicintegrity/redash
 
-  helm_deploy:
-    image: peloton/drone-helm
-    chart: ./charts/redash
-    release: archive
-    values: image.repository=publicintegrity/redash,image.tag=latest
-    prefix:
-    namespace: archive
-    secrets: [ api_server, kubernetes_token ]
-    skip_tls_verify: true
+#  helm_deploy:
+#    image: peloton/drone-helm
+#    chart: ./charts/redash
+#    release: redash
+#    values: image.repository=publicintegrity/redash,image.tag=latest,ingress.hosts[0]=$${HOST},postgres.postgresPassword=$${PGPASSWORD},postgres.postgresHost=$${PGHOST},redis.redisPassword=$${REDISPASSWORD}
+#    prefix:
+#    namespace: redash
+#    secrets: [ api_server, kubernetes_token, host, pgpassword, pghost, redispassword ]
+#    skip_tls_verify: true
 
-  slack:
-    image: plugins/slack
-    secrets: [ slack_webhook ]
-    when:
-      status: [ success, failure ]
+#  slack:
+#    image: plugins/slack
+#    secrets: [ slack_webhook ]
+#    when:
+#      status: [ success, failure ]
