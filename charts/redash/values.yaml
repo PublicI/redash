@@ -4,8 +4,8 @@
 ## Image used for server and worker pods
 ##
 image:
-  repository: redash/redash
-  tag: 4.0.1.b4038
+  repository: publicintegrity/redash
+  tag: latest
   pullPolicy: IfNotPresent
 
 ## Override the name of the chart
@@ -152,17 +152,18 @@ postgresql:
   postgresUser: redash
   postgresPassword: redash
   postgresDatabase: redash
-  persistence:
-    enabled: true
+  postgresHost: postgres.example.com
+#  persistence:
+#    enabled: true
     ## If defined, storageClassName: <storageClass>
     ## If set to "-", storageClassName: "", which disables dynamic provisioning
     ## If undefined (the default) or set to null, no storageClassName spec is
     ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
     ##   GKE, AWS & OpenStack)
     ##
-    storageClass: ""
-    accessMode: ReadWriteOnce
-    size: 10Gi
+#    storageClass: ""
+#    accessMode: ReadWriteOnce
+#    size: 10Gi
     # existingClaim: ""
 
 ## Configuration values for the redis dependency

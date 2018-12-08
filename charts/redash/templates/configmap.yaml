@@ -17,7 +17,7 @@ data:
       sleep 10
     done
     sleep 5
-    if /app/manage.py status 2>&1 | grep 'sqlalchemy.exc.ProgrammingError'; then
-      echo "Database tables not ready, creating tables now."
-      /app/manage.py database create_tables
-    fi
+    #if /app/manage.py status 2>&1 | grep 'sqlalchemy.exc.ProgrammingError'; then
+    #  echo "Database tables not ready, creating tables now."
+    #  /app/manage.py database create_tables
+    #fi
