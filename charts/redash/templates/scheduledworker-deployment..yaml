@@ -1,0 +1,62 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "redash.scheduledWorker.fullname" . }}
+  labels:
+    app: {{ template "redash.name" . }}
+    component: scheduledworker
+    chart: {{ template "redash.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.scheduledWorker.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "redash.name" . }}
+      component: scheduledworker
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "redash.name" . }}
+        component: scheduledworker
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ template "redash.name" . }}-scheduledworker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/app/bin/docker-entrypoint", "scheduler"]
+          env:
+            - name: REDASH_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "redash.fullname" . }}
+                  key: postgresURL
+            - name: REDASH_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "redash.fullname" . }}
+                  key: redisURL
+          {{- range $key, $value := .Values.env }}
+            - name: "{{ $key }}"
+              value: "{{ $value }}"
+          {{- end }}
+          {{- range $key, $value := .Values.scheduledWorker.env }}
+            - name: "{{ $key }}"
+              value: "{{ $value }}"
+          {{- end }}
+          resources:
+{{ toYaml .Values.scheduledWorker.resources | indent 12 }}
+    {{- if .Values.scheduledWorker.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.scheduledWorker.nodeSelector | indent 8 }}
+    {{- end }}
+    {{- with .Values.scheduledWorker.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.scheduledWorker.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
