@@ -1,9 +1,8 @@
 import 'brace/mode/snippets';
 import template from './edit.html';
 
-function SnippetCtrl($routeParams, $http, $location, toastr, currentUser, AlertDialog, Events, QuerySnippet) {
+function SnippetCtrl($routeParams, $http, $location, toastr, currentUser, AlertDialog, QuerySnippet) {
   this.snippetId = $routeParams.snippetId;
-  Events.record('view', 'query_snippet', this.snippetId);
 
   this.editorOptions = {
     mode: 'snippets',
@@ -70,3 +69,6 @@ export default function init(ngModule) {
     },
   };
 }
+
+init.init = true;
+

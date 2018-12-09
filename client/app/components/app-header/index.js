@@ -40,7 +40,7 @@ function controller($rootScope, $location, $route, $uibModal, Auth, currentUser,
   };
 
   this.searchQueries = () => {
-    $location.path('/queries').search({ q: this.term });
+    $location.path('/queries').search({ q: this.searchTerm });
     $route.reload();
   };
 
@@ -55,3 +55,5 @@ export default function init(ngModule) {
     controller,
   });
 }
+
+init.init = true;
