@@ -1,11 +1,10 @@
 import logging
 import requests
 from flask import redirect, url_for, Blueprint, flash, request, session
-from flask_login import login_user
 from flask_oauthlib.client import OAuth
 from redash import models, settings
+from redash.authentication import create_and_login_user, logout_and_redirect_to_index, get_next_path
 from redash.authentication.org_resolving import current_org
-from sqlalchemy.orm.exc import NoResultFound
 
 logger = logging.getLogger('office365_oauth')
 
@@ -56,23 +55,6 @@ def verify_profile(org, profile):
 
     return False
 
-def create_and_login_user(org, name, email):
-    try:
-        user_object = models.User.get_by_email_and_org(email, org)
-        if user_object.name != name:
-            logger.debug("Updating user name (%r -> %r)", user_object.name, name)
-            user_object.name = name
-            models.db.session.commit()
-    except NoResultFound:
-        logger.debug("Creating user object (%r)", name)
-        user_object = models.User(org=org, name=name, email=email, group_ids=[org.default_group.id])
-        models.db.session.add(user_object)
-        models.db.session.commit()
-
-    login_user(user_object, remember=True)
-
-    return user_object
-
 
 @blueprint.route('/<org_slug>/oauth/office365', endpoint="authorize_org")
 def org_login(org_slug):
@@ -83,10 +65,10 @@ def org_login(org_slug):
 @blueprint.route('/oauth/office365', endpoint="authorize")
 def login():
     callback = url_for('.callback', _external=True)
-    next = request.args.get('next', url_for("redash.index", org_slug=session.get('org_slug')))
+    next_path = request.args.get('next', url_for("redash.index", org_slug=session.get('org_slug')))
     logger.debug("Callback url: %s", callback)
-    logger.debug("Next is: %s", next)
-    return office365_remote_app().authorize(callback=callback, state=next)
+    logger.debug("Next is: %s", next_path)
+    return office365_remote_app().authorize(callback=callback, state=next_path)
 
 
 @blueprint.route('/auth/microsoft_v2_auth/callback', endpoint="callback")
@@ -120,8 +102,11 @@ def authorized():
     elif 'displayName' in profile:
         name = profile['displayName']
 
-    create_and_login_user(org,name, profile['mail'])
+    user = create_and_login_user(org, name, profile['mail'])
+    if user is None:
+        return logout_and_redirect_to_index()
 
-    next = request.args.get('state') or url_for("redash.index", org_slug=org.slug)
+    unsafe_next_path = request.args.get('state') or url_for("redash.index", org_slug=org.slug)
+    next_path = get_next_path(unsafe_next_path)
 
-    return redirect(next)
+    return redirect(next_path)
