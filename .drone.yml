@@ -32,7 +32,7 @@ pipeline:
     image: peloton/drone-helm
     chart: ./charts/redash
     release: dash-next
-    values: image.repository=publicintegrity/redash,image.tag=next,ingress.hosts[0]=dash-next.apps.fivetwentyseven.com,postgresql.postgresPassword=$${PGPASSWORD},postgresql.postgresHost=$${PGHOST},redis.redisPassword=$${REDISPASSWORD},env.REDASH_MAIL_SERVER=$${REDASH_MAIL_SERVER},env.REDASH_MAIL_USERNAME=$${REDASH_MAIL_USERNAME},env.REDASH_MAIL_PASSWORD=$${REDASH_MAIL_PASSWORD},env.REDASH_MAIL_DEFAULT_SENDER=$${REDASH_MAIL_DEFAULT_SENDER},env.REDASH_HOST=https://dash-next.apps.fivetwentyseven.com,env.REDASH_OFFICE365_CLIENT_ID=$${REDASH_OFFICE365_CLIENT_ID},env.REDASH_OFFICE365_CLIENT_SECRET=$${REDASH_OFFICE365_CLIENT_SECRET},REDASH_OFFICE365_OAUTH_ENABLED=True
+    values: image.repository=publicintegrity/redash,image.tag=next,ingress.hosts[0]=dash-next.apps.fivetwentyseven.com,postgresql.postgresPassword=$${PGPASSWORD},postgresql.postgresHost=$${PGHOST},redis.redisPassword=$${REDISPASSWORD},env.REDASH_HOST=https://dash-next.apps.fivetwentyseven.com,env.REDASH_OFFICE365_CLIENT_ID=$${REDASH_OFFICE365_CLIENT_ID},env.REDASH_OFFICE365_CLIENT_SECRET=$${REDASH_OFFICE365_CLIENT_SECRET},REDASH_OFFICE365_OAUTH_ENABLED=True
     prefix:
     namespace: dash-next
     secrets: [ api_server, kubernetes_token, host, pgpassword, pghost, redispassword, redash_mail_server, redash_mail_username, redash_mail_password, redash_mail_default_sender, redash_host, redash_office365_client_id, redash_office365_client_secret ]
