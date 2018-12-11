@@ -47,6 +47,9 @@ class OrganizationSettings(BaseResource):
             if k == 'auth_google_apps_domains':
                 previous_values[k] = self.current_org.google_apps_domains
                 self.current_org.settings[Organization.SETTING_GOOGLE_APPS_DOMAINS] = v
+            if k == 'auth_office365_domains':
+                previous_values[k] = self.current_org.office365_domains
+                self.current_org.settings[Organization.SETTING_OFFICE365_DOMAINS] = v
             else:
                 previous_values[k] = self.current_org.get_setting(k, raise_on_missing=False)
                 self.current_org.set_setting(k, v)
