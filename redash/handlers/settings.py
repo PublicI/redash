@@ -21,6 +21,7 @@ def get_settings_with_defaults(defaults, org):
             settings[setting] = current_value
 
     settings['auth_google_apps_domains'] = org.google_apps_domains
+    settings['auth_office365_domains'] = org.office365_domains
 
     return settings
 

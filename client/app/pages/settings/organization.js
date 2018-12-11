@@ -25,6 +25,7 @@ function OrganizationSettingsCtrl($http, toastr, clientConfig, Events) {
 
   this.dateFormatList = clientConfig.dateFormatList;
   this.googleLoginEnabled = clientConfig.googleLoginEnabled;
+  this.office365LoginEnabled = clientConfig.office365LoginEnabled;
 
   this.disablePasswordLoginToggle = () =>
     (clientConfig.googleLoginEnabled || clientConfig.office365LoginEnabled || this.settings.auth_saml_enabled) === false;

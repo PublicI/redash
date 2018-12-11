@@ -56,6 +56,26 @@
                 </div>
             </div>
 
+            <div ng-if="$ctrl.office365LoginEnabled">
+                <h4>Office 365 Login</h4>
+                <label>
+                    Allowed Office 365 Domains
+                </label>
+                <ui-select multiple tagging tagging-label="false" ng-model="$ctrl.settings.auth_office365_domains" tagging-tokens="SPACE|,"
+                    title="Office 365 Domain(s)"
+                    ng-change="$ctrl.update('auth_office365_domains')">
+                    <ui-select-match placeholder="Office 365 Domain(s)">{{$item}}</ui-select-match>
+                    <!-- the ui-select-choices is here just to make ui-select work -->
+                    <ui-select-choices repeat="domain in $ctrl.domains">
+                        {{domain}}
+                    </ui-select-choices>
+                </ui-select>
+
+                <div class="callout callout-info m-t-5" ng-if="$ctrl.settings.auth_office365_domains | notEmpty">
+                    Any user registered with a <strong>{{$ctrl.settings.auth_office365_domains | join}}</strong> Office 365 account will be able to login. If they don't have an existing user, a new user will be created and join the <strong>Default</strong> group.
+                </div>
+            </div>
+
             <h4>SAML</h4>
             <p>
                 <label>
