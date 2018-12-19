@@ -1,9 +1,9 @@
 
 pipeline:
-  build:
-    image: plugins/docker
-    secrets: [ docker_username, docker_password ]
-    repo: publicintegrity/redash
+  # build:
+  #   image: plugins/docker
+  #   secrets: [ docker_username, docker_password ]
+  #   repo: publicintegrity/redash
 
   helm_deploy:
     image: peloton/drone-helm
