@@ -20,6 +20,7 @@ env:
   REDASH_LOG_LEVEL: "INFO"
   REDASH_MAIL_USE_TLS: True
   REDASH_DATE_FORMAT: "MM/DD/YY"
+  REDASH_CORS_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
 
 ## Configuration for Redash web server
 ##
