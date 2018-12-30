@@ -37,7 +37,7 @@ server:
   env:
     REDASH_WEB_WORKERS: 4
 
-  replicaCount: 1
+  replicaCount: 2
 
   ## Server resource requests and limits
   ## Ref: http://kubernetes.io/docs/user-guide/compute-resources/
@@ -93,7 +93,7 @@ adhocWorker:
     QUEUES: "queries,celery"
     WORKERS_COUNT: 2
 
-  replicaCount: 1
+  replicaCount: 2
 
   ## Ad-hoc worker resource requests and limits
   ## Ref: http://kubernetes.io/docs/user-guide/compute-resources/
