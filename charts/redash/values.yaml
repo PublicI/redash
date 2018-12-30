@@ -52,7 +52,8 @@ server:
   ## Node labels for server pod assignment
   ## Ref: https://kubernetes.io/docs/user-guide/node-selection/
   ##
-  nodeSelector: {}
+  nodeSelector:
+    cloud.google.com/gke-nodepool: default-pool
 
   ## Tolerations for server pod assignment
   ## Ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
@@ -101,7 +102,8 @@ adhocWorker:
   ## Node labels for ad-hoc worker pod assignment
   ## Ref: https://kubernetes.io/docs/user-guide/node-selection/
   ##
-  nodeSelector: {}
+  nodeSelector:
+    cloud.google.com/gke-nodepool: default-pool
 
   ## Tolerations for ad-hoc worker pod assignment
   ## Ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
@@ -133,7 +135,8 @@ scheduledWorker:
   ## Node labels for scheduled worker pod assignment
   ## Ref: https://kubernetes.io/docs/user-guide/node-selection/
   ##
-  nodeSelector: {}
+  nodeSelector:
+    cloud.google.com/gke-nodepool: default-pool
 
   ## Tolerations for scheduled worker pod assignment
   ## Ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
