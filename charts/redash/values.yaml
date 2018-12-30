@@ -37,7 +37,7 @@ server:
   env:
     REDASH_WEB_WORKERS: 4
 
-  replicaCount: 2
+  replicaCount: 1
 
   ## Server resource requests and limits
   ## Ref: http://kubernetes.io/docs/user-guide/compute-resources/
