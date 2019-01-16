@@ -178,4 +178,5 @@ postgresql:
 ##
 redis:
   redisPassword: redash
-
+  master:
+    disableCommands: []
