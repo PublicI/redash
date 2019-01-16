@@ -14,6 +14,9 @@ pipeline:
     namespace: dash
     secrets: [ api_server, kubernetes_token, host, pgpassword, pghost, redispassword, redash_mail_server, redash_mail_username, redash_mail_password, redash_mail_default_sender, redash_host, redash_office365_client_id, redash_office365_client_secret ]
     skip_tls_verify: true
+    when:
+      event: deployment
+      environment: production
 
   slack:
     image: plugins/slack
