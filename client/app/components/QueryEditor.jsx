@@ -172,6 +172,12 @@ class QueryEditor extends React.Component {
     localOptions.set('liveAutocomplete', state);
   }
 
+  componentDidUpdate = () => {
+    // ANGULAR_REMOVE_ME  Work-around for a resizing issue, see https://github.com/getredash/redash/issues/3353
+    const { editor } = this.refEditor.current;
+    editor.resize();
+  };
+
   render() {
     // eslint-disable-next-line react/prop-types
     const modKey = this.props.KeyboardShortcuts.modKey;
