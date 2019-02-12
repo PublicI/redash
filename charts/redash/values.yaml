@@ -164,7 +164,7 @@ scheduledWorker:
 postgresql:
   ## Whether to deploy a PostgreSQL server to satisfy the applications database requirements.
   ## To use an external PostgreSQL set this to false and configure the externalPostgreSQL parameter.
-  enabled: true
+  enabled: false
   image:
     ## Bitnami supported version closest to the one specified in Redash docker-compose.yml
     ##
