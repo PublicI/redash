@@ -153,8 +153,8 @@ spec:
               path: /static/images/redash_icon_small.png
               port: {{ .Values.server.httpPort }}
             initialDelaySeconds: 10
-            timeoutSeconds: 1
-            periodSeconds: 10
+            timeoutSeconds: 2
+            periodSeconds: 60
             successThreshold: 1
             failureThreshold: 3
           resources:
