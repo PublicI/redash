@@ -4,8 +4,8 @@
 ## Image used for server and worker pods
 ##
 image:
-  repository: publicintegrity/redash
-  tag: latest
+  repository: redash/redash
+  tag: 6.0.0.b8537
   pullPolicy: IfNotPresent
 
 ## Override the name of the chart
@@ -48,7 +48,7 @@ server:
     #  memory: 128Mi
     requests:
     #  cpu: 100m
-      memory: 1Gi
+      memory: 2Gi
 
   ## Node labels for server pod assignment
   ## Ref: https://kubernetes.io/docs/user-guide/node-selection/
@@ -71,13 +71,13 @@ service:
   port: 80
 
 ingress:
-  enabled: true
+  enabled: false
   annotations: {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   path: /
   hosts:
-    - example.local
+    - chart-example.local
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:
@@ -149,27 +149,46 @@ scheduledWorker:
   ##
   affinity: {}
 
+##
+## External PostgreSQL configuration
+## To use an external PostgreSQL instead of the automatically deployed
+## postgresql chart: set postgresql.enabled to false then uncomment and
+## configure the externalPostgreSQL connection URL.
+##
+# externalPostgreSQL: postgresql://user:pass@host:5432/database
+
 ## Configuration values for the postgresql dependency
 ## This PostgreSQL instance is used for all Redash state storage
 ## ref: https://github.com/kubernetes/charts/blob/master/stable/postgresql/README.md
 ##
 postgresql:
-#  imageTag: "9.5.6-alpine"
-  postgresUser: redash
-  postgresPassword: redash
-  postgresDatabase: redash
-  postgresHost: postgres.example.com
-#  persistence:
-#    enabled: true
+  ## Whether to deploy a PostgreSQL server to satisfy the applications database requirements.
+  ## To use an external PostgreSQL set this to false and configure the externalPostgreSQL parameter.
+  enabled: true
+  image:
+    ## Bitnami supported version closest to the one specified in Redash docker-compose.yml
+    ##
+    tag: "9.6.11-debian-9-r66"
+  postgresqlUsername: redash
+  ## If the password is not specified, a random password will be generated
+  ##
+  # postgresqlPassword:
+  postgresqlDatabase: redash
+  service:
+    type: ClusterIP
+    port: 5432
+    externalIPs: []
+  persistence:
+    enabled: true
     ## If defined, storageClassName: <storageClass>
     ## If set to "-", storageClassName: "", which disables dynamic provisioning
     ## If undefined (the default) or set to null, no storageClassName spec is
     ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
     ##   GKE, AWS & OpenStack)
     ##
-#    storageClass: ""
-#    accessMode: ReadWriteOnce
-#    size: 10Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
     # existingClaim: ""
 
 ## Configuration values for the redis dependency
@@ -177,6 +196,11 @@ postgresql:
 ## ref: https://github.com/kubernetes/charts/blob/master/stable/redis/README.md
 ##
 redis:
-  redisPassword: redash
+  ## If the password is not specified, a random password will be generated
+  ##
+  # password:
+  databaseNumber: 0
   master:
-    disableCommands: []
+    port: 6379
+  cluster:
+    enabled: false
