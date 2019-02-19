@@ -51,9 +51,6 @@ def verify_profile(org, profile):
     if domain in org.google_apps_domains:
         return True
 
-    if domain in org.office365_domains:
-        return True
-
     if org.has_user(email) == 1:
         return True
 

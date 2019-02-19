@@ -16,8 +16,6 @@ def set_google_apps_domains(domains):
     organization = models.Organization.query.first()
     k = models.Organization.SETTING_GOOGLE_APPS_DOMAINS
     organization.settings[k] = domains.split(',')
-    k = models.Organization.SETTING_OFFICE365_DOMAINS
-    organization.settings[k] = domains.split(',')
     models.db.session.add(organization)
     models.db.session.commit()
     print("Updated list of allowed domains to: {}".format(
