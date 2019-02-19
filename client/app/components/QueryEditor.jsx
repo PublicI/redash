@@ -81,6 +81,9 @@ class QueryEditor extends React.Component {
 
   constructor(props) {
     super(props);
+
+    this.refEditor = React.createRef();
+
     this.state = {
       schema: null, // eslint-disable-line react/no-unused-state
       keywords: [], // eslint-disable-line react/no-unused-state
