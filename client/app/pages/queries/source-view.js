@@ -1,15 +1,13 @@
-import { map } from 'lodash';
+import { map, defer } from 'lodash';
 import template from './query.html';
 
 function QuerySourceCtrl(
   Events,
-  toastr,
   $controller,
   $scope,
   $location,
   $uibModal,
   currentUser,
-  Query,
   KeyboardShortcuts,
   $rootScope,
 ) {
@@ -53,6 +51,8 @@ function QuerySourceCtrl(
 
   $scope.canForkQuery = () => currentUser.hasPermission('edit_query') && !$scope.dataSource.view_only;
 
+  $scope.updateQuery = newQueryText => defer(() => $scope.$apply(() => { $scope.query.query = newQueryText; }));
+
   // @override
   $scope.saveQuery = (options, data) => {
     const savePromise = saveQuery(options, data);
@@ -70,14 +70,6 @@ function QuerySourceCtrl(
     });
 
     return savePromise;
-  };
-
-  $scope.formatQuery = () => {
-    Query.format($scope.dataSource.syntax, $scope.query.query)
-      .then((query) => {
-        $scope.query.query = query;
-      })
-      .catch(error => toastr.error(error));
   };
 
   $scope.addNewParameter = () => {
@@ -101,6 +93,9 @@ function QuerySourceCtrl(
         $rootScope.$broadcast('query-editor.command', 'focus');
       });
   };
+
+  $scope.listenForEditorCommand = f => $scope.$on('query-editor.command', f);
+  $scope.listenForResize = f => $scope.$parent.$on('angular-resizable.resizing', f);
 
   $scope.$watch('query.query', (newQueryText) => {
     $scope.isDirty = newQueryText !== queryText;
@@ -144,3 +139,6 @@ export default function init(ngModule) {
     },
   };
 }
+
+init.init = true;
+

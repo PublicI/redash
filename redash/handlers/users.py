@@ -5,7 +5,7 @@ from flask_login import current_user
 from funcy import project
 from sqlalchemy.exc import IntegrityError
 from disposable_email_domains import blacklist
-from funcy import rpartial
+from funcy import partial
 
 from redash import models
 from redash.permissions import require_permission, require_admin_or_owner, is_admin_or_owner, \
@@ -25,7 +25,12 @@ order_map = {
     '-groups': '-group_ids',
 }
 
-order_results = rpartial(_order_results, '-created_at', order_map)
+order_results = partial(
+    _order_results,
+    default_order='-created_at',
+    allowed_orders=order_map,
+)
+
 
 def invite_user(org, inviter, user):
     invite_url = invite_link_for_user(user)
@@ -49,13 +54,13 @@ class UserListResource(BaseResource):
 
                 if group:
                     user_groups.append({'id': group.id, 'name': group.name})
-            
+
             d['groups'] = user_groups
 
             return d
 
         search_term = request.args.get('q', '')
-        
+
         if request.args.get('disabled', None) is not None:
             users = models.User.all_disabled(self.current_org)
         else:
@@ -63,10 +68,23 @@ class UserListResource(BaseResource):
 
         if search_term:
             users = models.User.search(users, search_term)
-        
-        users = order_results(users)
+            self.record_event({
+                'action': 'search',
+                'object_type': 'user',
+                'term': search_term,
+            })
+        else:
+            self.record_event({
+                'action': 'list',
+                'object_type': 'user',
+            })
 
-        return paginate(users, page, page_size, serialize_user)
+        # order results according to passed order parameter,
+        # special-casing search queries where the database
+        # provides an order by search rank
+        ordered_users = order_results(users, fallback=bool(search_term))
+
+        return paginate(ordered_users, page, page_size, serialize_user)
 
     @require_admin
     def post(self):
@@ -93,7 +111,6 @@ class UserListResource(BaseResource):
 
         self.record_event({
             'action': 'create',
-            'timestamp': int(time.time()),
             'object_id': user.id,
             'object_type': 'user'
         })
@@ -139,6 +156,12 @@ class UserResource(BaseResource):
         require_permission_or_owner('list_users', user_id)
         user = get_object_or_404(models.User.get_by_id_and_org, user_id, self.current_org)
 
+        self.record_event({
+            'action': 'view',
+            'object_id': user_id,
+            'object_type': 'user',
+        })
+
         return user.to_dict(with_api_key=is_admin_or_owner(user_id))
 
     def post(self, user_id):
@@ -161,6 +184,12 @@ class UserResource(BaseResource):
 
         if 'groups' in params and not self.current_user.has_permission('admin'):
             abort(403, message="Must be admin to change groups membership.")
+        
+        if 'email' in params:
+            _, domain = params['email'].split('@', 1)
+
+            if domain.lower() in blacklist or domain.lower() == 'qq.com':
+                abort(400, message='Bad email address.')
 
         try:
             self.update_model(user, params)
@@ -175,7 +204,6 @@ class UserResource(BaseResource):
 
         self.record_event({
             'action': 'edit',
-            'timestamp': int(time.time()),
             'object_id': user.id,
             'object_type': 'user',
             'updated_fields': params.keys()
@@ -191,7 +219,7 @@ class UserDisableResource(BaseResource):
         # admin cannot disable self; current user is an admin (`@require_admin`)
         # so just check user id
         if user.id == current_user.id:
-            abort(400, message="You cannot disable your own account. "
+            abort(403, message="You cannot disable your own account. "
                                "Please ask another admin to do this for you.")
         user.disable()
         models.db.session.commit()

@@ -1,5 +1,4 @@
 import datetime
-import json
 import logging
 import sys
 import time
@@ -10,7 +9,7 @@ import requests
 
 from redash import settings
 from redash.query_runner import *
-from redash.utils import JSONEncoder
+from redash.utils import json_dumps, json_loads
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +110,8 @@ class BigQuery(BaseQueryRunner):
                 },
                 'useStandardSql': {
                     "type": "boolean",
-                    'title': "Use Standard SQL (Beta)",
+                    'title': "Use Standard SQL",
+                    "default": True,
                 },
                 'location': {
                     "type": "string",
@@ -141,7 +141,7 @@ class BigQuery(BaseQueryRunner):
             "https://www.googleapis.com/auth/drive"
         ]
 
-        key = json.loads(b64decode(self.configuration['jsonKeyFile']))
+        key = json_loads(b64decode(self.configuration['jsonKeyFile']))
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key, scope)
         http = httplib2.Http(timeout=settings.BIGQUERY_HTTP_TIMEOUT)
@@ -239,7 +239,9 @@ class BigQuery(BaseQueryRunner):
         for column in table_data['schema']['fields']:
             columns.extend(self._get_columns_schema_column(column))
 
-        return {'name': table_data['id'], 'columns': columns}
+        project_id = self._get_project_id()
+        table_name = table_data['id'].replace("%s:" % project_id, "")
+        return {'name': table_name, 'columns': columns}
 
     def _get_columns_schema_column(self, column):
         columns = []
@@ -296,18 +298,16 @@ class BigQuery(BaseQueryRunner):
             data = self._get_query_result(jobs, query)
             error = None
 
-            json_data = json.dumps(data, cls=JSONEncoder)
+            json_data = json_dumps(data)
         except apiclient.errors.HttpError as e:
             json_data = None
             if e.resp.status == 400:
-                error = json.loads(e.content)['error']['message']
+                error = json_loads(e.content)['error']['message']
             else:
                 error = e.content
         except KeyboardInterrupt:
             error = "Query cancelled by user."
             json_data = None
-        except Exception:
-            raise sys.exc_info()[1], None, sys.exc_info()[2]
 
         return json_data, error
 
@@ -342,7 +342,8 @@ class BigQueryGCE(BigQuery):
                 },
                 'useStandardSql': {
                     "type": "boolean",
-                    'title': "Use Standard SQL (Beta)",
+                    'title': "Use Standard SQL",
+                    "default": True,
                 },
                 'location': {
                     "type": "string",

@@ -1,5 +1,5 @@
 from flask import request, url_for
-from funcy import project, rpartial
+from funcy import project, partial
 
 from flask_restful import abort
 from redash import models, serializers
@@ -21,7 +21,11 @@ order_map = {
     '-created_at': '-created_at',
 }
 
-order_results = rpartial(_order_results, '-created_at', order_map)
+order_results = partial(
+    _order_results,
+    default_order='-created_at',
+    allowed_orders=order_map,
+)
 
 
 class DashboardListResource(BaseResource):
@@ -56,8 +60,10 @@ class DashboardListResource(BaseResource):
 
         results = filter_by_tags(results, models.Dashboard.tags)
 
-        # order results according to passed order parameter
-        ordered_results = order_results(results)
+        # order results according to passed order parameter,
+        # special-casing search queries where the database
+        # provides an order by search rank
+        ordered_results = order_results(results, fallback=bool(search_term))
 
         page = request.args.get('page', 1, type=int)
         page_size = request.args.get('page_size', 25, type=int)
@@ -68,6 +74,18 @@ class DashboardListResource(BaseResource):
             page_size=page_size,
             serializer=serialize_dashboard,
         )
+
+        if search_term:
+            self.record_event({
+                'action': 'search',
+                'object_type': 'dashboard',
+                'term': search_term,
+            })
+        else:
+            self.record_event({
+                'action': 'list',
+                'object_type': 'dashboard',
+            })
 
         return response
 
@@ -137,6 +155,12 @@ class DashboardResource(BaseResource):
 
         response['can_edit'] = can_modify(dashboard, self.current_user)
 
+        self.record_event({
+            'action': 'view',
+            'object_id': dashboard.id,
+            'object_type': 'dashboard',
+        })
+
         return response
 
     @require_permission('edit_dashboard')
@@ -176,6 +200,13 @@ class DashboardResource(BaseResource):
             abort(409)
 
         result = serialize_dashboard(dashboard, with_widgets=True, user=self.current_user)
+
+        self.record_event({
+            'action': 'edit',
+            'object_id': dashboard.id,
+            'object_type': 'dashboard',
+        })
+
         return result
 
     @require_permission('edit_dashboard')
@@ -193,6 +224,13 @@ class DashboardResource(BaseResource):
         models.db.session.add(dashboard)
         d = serialize_dashboard(dashboard, with_widgets=True, user=self.current_user)
         models.db.session.commit()
+
+        self.record_event({
+            'action': 'archive',
+            'object_id': dashboard.id,
+            'object_type': 'dashboard',
+        })
+
         return d
 
 
@@ -259,10 +297,20 @@ class DashboardShareResource(BaseResource):
             'object_type': 'dashboard',
         })
 
+
 class DashboardTagsResource(BaseResource):
     @require_permission('list_dashboards')
     def get(self):
         """
         Lists all accessible dashboards.
         """
-        return {t[0]: t[1] for t in models.Dashboard.all_tags(self.current_org, self.current_user)}
+        tags = models.Dashboard.all_tags(self.current_org, self.current_user)
+        return {
+            'tags': [
+                {
+                    'name': name,
+                    'count': count,
+                }
+                for name, count in tags
+            ]
+        }

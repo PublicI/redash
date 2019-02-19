@@ -1,10 +1,11 @@
+from __future__ import print_function
 import os
 from .helpers import parse_boolean
 
 if os.environ.get("REDASH_SAML_LOCAL_METADATA_PATH") is not None:
-    print "DEPRECATION NOTICE:\n"
-    print "SAML_LOCAL_METADATA_PATH is no longer supported. Only URL metadata is supported now, please update"
-    print "your configuration and reload."
+    print("DEPRECATION NOTICE:\n")
+    print("SAML_LOCAL_METADATA_PATH is no longer supported. Only URL metadata is supported now, please update")
+    print("your configuration and reload.")
     raise SystemExit(1)
 
 
@@ -25,6 +26,8 @@ JWT_AUTH_ALGORITHMS = os.environ.get("REDASH_JWT_AUTH_ALGORITHMS", "HS256,RS256,
 JWT_AUTH_COOKIE_NAME = os.environ.get("REDASH_JWT_AUTH_COOKIE_NAME", "")
 JWT_AUTH_HEADER_NAME = os.environ.get("REDASH_JWT_AUTH_HEADER_NAME", "")
 
+FEATURE_SHOW_PERMISSIONS_CONTROL = parse_boolean(os.environ.get("REDASH_FEATURE_SHOW_PERMISSIONS_CONTROL", "false"))
+
 settings = {
     "auth_password_login_enabled": PASSWORD_LOGIN_ENABLED,
     "auth_saml_enabled": SAML_LOGIN_ENABLED,
@@ -39,4 +42,5 @@ settings = {
     "auth_jwt_auth_algorithms": JWT_AUTH_ALGORITHMS,
     "auth_jwt_auth_cookie_name": JWT_AUTH_COOKIE_NAME,
     "auth_jwt_auth_header_name": JWT_AUTH_HEADER_NAME,
+    "feature_show_permissions_control": FEATURE_SHOW_PERMISSIONS_CONTROL,
 }

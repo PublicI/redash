@@ -4,9 +4,6 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { react2angular } from 'react2angular';
 import { RangePicker } from 'antd/lib/date-picker';
-import 'antd/lib/style/core/iconfont.less';
-import 'antd/lib/input/style/index.less';
-import 'antd/lib/date-picker/style/index.less';
 
 function DateRangeInput({
   value,
@@ -53,3 +50,4 @@ export default function init(ngModule) {
   ngModule.component('dateRangeInput', react2angular(DateRangeInput, null, ['clientConfig']));
 }
 
+init.init = true;

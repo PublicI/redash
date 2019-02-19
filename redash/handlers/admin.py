@@ -1,13 +1,14 @@
-import json
-
 from flask import request
-from flask_login import login_required
+from flask_login import login_required, current_user
+
 from redash import models, redis_connection
+from redash.authentication import current_org
 from redash.handlers import routes
-from redash.handlers.base import json_response
+from redash.handlers.base import json_response, record_event
 from redash.permissions import require_super_admin
 from redash.serializers import QuerySerializer
 from redash.tasks.queries import QueryTaskTracker
+from redash.utils import json_loads
 
 
 @routes.route('/api/admin/queries/outdated', methods=['GET'])
@@ -15,7 +16,7 @@ from redash.tasks.queries import QueryTaskTracker
 @login_required
 def outdated_queries():
     manager_status = redis_connection.hgetall('redash:status')
-    query_ids = json.loads(manager_status.get('query_ids', '[]'))
+    query_ids = json_loads(manager_status.get('query_ids', '[]'))
     if query_ids:
         outdated_queries = (
             models.Query.query.outerjoin(models.QueryResult)
@@ -24,6 +25,11 @@ def outdated_queries():
         )
     else:
         outdated_queries = []
+
+    record_event(current_org, current_user._get_current_object(), {
+        'action': 'list',
+        'object_type': 'outdated_queries',
+    })
 
     response = {
         'queries': QuerySerializer(outdated_queries, with_stats=True, with_last_modified_by=False).serialize(),
@@ -36,6 +42,12 @@ def outdated_queries():
 @require_super_admin
 @login_required
 def queries_tasks():
+    record_event(current_org, current_user._get_current_object(), {
+        'action': 'list',
+        'object_id': 'admin/tasks',
+        'object_type': 'celery_tasks'
+    })
+
     global_limit = int(request.args.get('limit', 50))
     waiting_limit = int(request.args.get('waiting_limit', global_limit))
     progress_limit = int(request.args.get('progress_limit', global_limit))
