@@ -1,16 +1,5 @@
 
 pipeline:
-  build_dry_run:
-    image: plugins/docker
-    secrets: [ docker_username, docker_password ]
-    repo: publicintegrity/redash
-    tags:
-      - ${DRONE_COMMIT_SHA:0:12}
-      - latest
-    dry_run: true
-    when:
-      event: [ push, tag ]
-
   build_push:
     image: plugins/docker
     secrets: [ docker_username, docker_password ]
@@ -19,8 +8,7 @@ pipeline:
       - ${DRONE_COMMIT_SHA:0:12}
       - latest
     when:
-      event: deployment
-      environment: [ production, staging ]
+      event: [ push, tag ]
 
   helm_deploy:
     image: publicintegrity/drone-helm
