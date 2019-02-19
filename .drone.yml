@@ -9,7 +9,7 @@ pipeline:
       - latest
     dry_run: true
     when:
-      event: [push, tag]
+      event: [ push, tag ]
 
  build_push:
     image: plugins/docker
@@ -20,6 +20,7 @@ pipeline:
       - latest
     when:
       event: deployment
+      environment: [ production, staging ]
 
   helm_deploy:
     image: publicintegrity/drone-helm
