@@ -11,7 +11,7 @@ pipeline:
     when:
       event: [ push, tag ]
 
- build_push:
+  build_push:
     image: plugins/docker
     secrets: [ docker_username, docker_password ]
     repo: publicintegrity/redash
