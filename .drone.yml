@@ -4,6 +4,7 @@ pipeline:
     image: plugins/docker
     secrets: [ docker_username, docker_password ]
     repo: publicintegrity/redash
+    cache_from: "publicintegrity/redash:latest"
     tags:
       - ${DRONE_COMMIT_SHA:0:12}
       - latest
