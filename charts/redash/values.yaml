@@ -22,6 +22,9 @@ env:
   REDASH_DATE_FORMAT: "MM/DD/YY"
   REDASH_CORS_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
 
+## Secure value for source encryption secret - if not set a random value will be generated
+# sourceSecret:
+
 ## Configuration for Redash web server
 ##
 server:

@@ -36,6 +36,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "redash.fullname" . }}
                   key: cookieSecret
+            - name: REDASH_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "redash.fullname" . }}
+                  key: sourceSecret
             - name: REDASH_DATABASE_URL
             {{- if not .Values.postgresql.enabled }}
               value: {{ default "" .Values.externalPostgreSQL | quote }}
