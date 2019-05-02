@@ -1,23 +1,23 @@
 
 pipeline:
-  build_push:
-    image: plugins/docker
-    secrets: [ docker_username, docker_password ]
-    repo: publicintegrity/redash
-    cache_from: "publicintegrity/redash:latest"
-    tags:
-      - ${DRONE_COMMIT_SHA:0:12}
-      - latest
-    when:
-      event: [ push, tag ]
+  # build_push:
+  #   image: plugins/docker
+  #   secrets: [ docker_username, docker_password ]
+  #   repo: publicintegrity/redash
+  #   cache_from: "publicintegrity/redash:latest"
+  #   tags:
+  #     - ${DRONE_COMMIT_SHA:0:12}
+  #     - latest
+  #   when:
+  #     event: [ push, tag ]
 
   helm_deploy:
     image: publicintegrity/drone-helm
     chart: ./charts/redash
     release: dash
     environment:
-      - IMAGE_TAG=${DRONE_COMMIT_SHA:0:12}
-    values: image.repository=publicintegrity/redash,image.tag=$${IMAGE_TAG},ingress.hosts[0]=$${HOST},ingress.hosts[1]=dash.fivetwentyseven.com,externalPostgreSQL=postgresql://redash:$${PGPASSWORD}@$${PGHOST}:5432/redash,redis.redisPassword=$${REDISPASSWORD},env.REDASH_MAIL_SERVER=$${REDASH_MAIL_SERVER},env.REDASH_MAIL_USERNAME=$${REDASH_MAIL_USERNAME},env.REDASH_MAIL_PASSWORD=$${REDASH_MAIL_PASSWORD},env.REDASH_MAIL_DEFAULT_SENDER=$${REDASH_MAIL_DEFAULT_SENDER},env.REDASH_HOST=$${REDASH_HOST},env.REDASH_OFFICE365_CLIENT_ID=$${REDASH_OFFICE365_CLIENT_ID},env.REDASH_OFFICE365_CLIENT_SECRET=$${REDASH_OFFICE365_CLIENT_SECRET},REDASH_OFFICE365_OAUTH_ENABLED=True
+      - IMAGE_TAG=7.0.0.b18042 #${DRONE_COMMIT_SHA:0:12}
+    values: image.repository=redash/redash,image.tag=$${IMAGE_TAG},ingress.hosts[0]=$${HOST},ingress.hosts[1]=dash.fivetwentyseven.com,externalPostgreSQL=postgresql://redash:$${PGPASSWORD}@$${PGHOST}:5432/redash,redis.redisPassword=$${REDISPASSWORD},env.REDASH_MAIL_SERVER=$${REDASH_MAIL_SERVER},env.REDASH_MAIL_USERNAME=$${REDASH_MAIL_USERNAME},env.REDASH_MAIL_PASSWORD=$${REDASH_MAIL_PASSWORD},env.REDASH_MAIL_DEFAULT_SENDER=$${REDASH_MAIL_DEFAULT_SENDER},env.REDASH_HOST=$${REDASH_HOST},env.REDASH_OFFICE365_CLIENT_ID=$${REDASH_OFFICE365_CLIENT_ID},env.REDASH_OFFICE365_CLIENT_SECRET=$${REDASH_OFFICE365_CLIENT_SECRET},REDASH_OFFICE365_OAUTH_ENABLED=True
     prefix:
     namespace: dash
     secrets: [ api_server, kubernetes_token, host, pgpassword, pghost, redispassword, redash_mail_server, redash_mail_username, redash_mail_password, redash_mail_default_sender, redash_host, redash_office365_client_id, redash_office365_client_secret ]
@@ -31,8 +31,8 @@ pipeline:
     chart: ./charts/redash
     release: dash-next
     environment:
-      - IMAGE_TAG=${DRONE_COMMIT_SHA:0:12}
-    values: image.repository=publicintegrity/redash,image.tag=$${IMAGE_TAG},ingress.hosts[0]=dash.publicintegrity.org,externalPostgreSQL=postgresql://redash:$${PGPASSWORD}@$${PGHOST}:5432/redash,redis.redisPassword=$${REDISPASSWORD},env.REDASH_MAIL_SERVER=$${REDASH_MAIL_SERVER},env.REDASH_MAIL_USERNAME=$${REDASH_MAIL_USERNAME},env.REDASH_MAIL_PASSWORD=$${REDASH_MAIL_PASSWORD},env.REDASH_MAIL_DEFAULT_SENDER=$${REDASH_MAIL_DEFAULT_SENDER},env.REDASH_HOST=https://dash.publicintegrity.org,env.REDASH_OFFICE365_CLIENT_ID=$${REDASH_OFFICE365_CLIENT_ID},env.REDASH_OFFICE365_CLIENT_SECRET=$${REDASH_OFFICE365_CLIENT_SECRET},REDASH_OFFICE365_OAUTH_ENABLED=True
+      - IMAGE_TAG=7.0.0.b18042 #${DRONE_COMMIT_SHA:0:12}
+    values: image.repository=redash/redash,image.tag=$${IMAGE_TAG},ingress.hosts[0]=dash.publicintegrity.org,externalPostgreSQL=postgresql://redash:$${PGPASSWORD}@$${PGHOST}:5432/redash,redis.redisPassword=$${REDISPASSWORD},env.REDASH_MAIL_SERVER=$${REDASH_MAIL_SERVER},env.REDASH_MAIL_USERNAME=$${REDASH_MAIL_USERNAME},env.REDASH_MAIL_PASSWORD=$${REDASH_MAIL_PASSWORD},env.REDASH_MAIL_DEFAULT_SENDER=$${REDASH_MAIL_DEFAULT_SENDER},env.REDASH_HOST=https://dash.publicintegrity.org,env.REDASH_OFFICE365_CLIENT_ID=$${REDASH_OFFICE365_CLIENT_ID},env.REDASH_OFFICE365_CLIENT_SECRET=$${REDASH_OFFICE365_CLIENT_SECRET},REDASH_OFFICE365_OAUTH_ENABLED=True
     prefix:
     namespace: dash-next
     secrets: [ api_server, kubernetes_token, host, pgpassword, pghost, redispassword, redash_mail_server, redash_mail_username, redash_mail_password, redash_mail_default_sender, redash_host, redash_office365_client_id, redash_office365_client_secret ]
